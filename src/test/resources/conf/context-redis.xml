@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Context>
+	<WatchedResource>WEB-INF/web.xml</WatchedResource>
+	<Valve className="org.appng.tomcat.session.redis.RedisSessionHandlerValve" />
+	<Manager className="org.appng.tomcat.session.redis.RedisSessionManager" host="localhost" port="6379"
+		database="0" maxInactiveInterval="60"
+		serializationStrategyClass="org.appng.tomcat.session.redis.RedisSerializer"
+		sessionPersistPolicies="ALWAYS_SAVE_AFTER_REQUEST"
+		/>
+</Context>

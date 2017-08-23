@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Context>
+	<WatchedResource>WEB-INF/web.xml</WatchedResource>
+	<Valve className="org.appng.tomcat.session.mongo.MongoSessionTrackerValve" />
+	<Manager className="org.appng.tomcat.session.mongo.MongoPersistentManager" maxIdleBackup="30">
+		<Store className="org.appng.tomcat.session.mongo.MongoStore" hosts="localhost:27017" dbName="sessiontest"
+			maxPoolSize="25" connectionTimeoutMs="250" connectionWaitTimeoutMs="250"/>
+	</Manager>
+</Context>
