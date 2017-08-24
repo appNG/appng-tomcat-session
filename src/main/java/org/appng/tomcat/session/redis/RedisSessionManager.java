@@ -301,7 +301,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 	}
 
 	@Override
-	public Session createSession(String requestedSessionId) {
+	public RedisSession createSession(String requestedSessionId) {
 		RedisSession session = null;
 		String sessionId = null;
 		String jvmRoute = getJvmRoute();
@@ -390,7 +390,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 	}
 
 	@Override
-	public Session findSession(String id) throws IOException {
+	public RedisSession findSession(String id) throws IOException {
 		RedisSession session = null;
 
 		if (null == id) {
@@ -590,7 +590,6 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 	}
 
 	protected int getSessionTimeout() {
-		getContext().setSessionTimeout(1);
 		return getContext().getSessionTimeout() * 60;
 	}
 
@@ -691,7 +690,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 		processingTime += duration;
 	}
 
-	private void initializeDatabaseConnection() throws LifecycleException {
+	void initializeDatabaseConnection() throws LifecycleException {
 		try {
 			if (getSentinelMaster() != null) {
 				Set<String> sentinelSet = getSentinelSet();
@@ -712,7 +711,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 		}
 	}
 
-	private void initializeSerializer() throws ReflectiveOperationException {
+	void initializeSerializer() throws ReflectiveOperationException {
 		log.info("Attempting to use serializer :" + serializationStrategyClass);
 		serializer = (Serializer) Class.forName(serializationStrategyClass).newInstance();
 

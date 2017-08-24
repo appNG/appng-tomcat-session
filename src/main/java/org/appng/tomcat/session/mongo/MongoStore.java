@@ -227,7 +227,7 @@ public class MongoStore extends StoreBase {
 	/**
 	 * {@inheritDoc}
 	 */
-	public Session load(String id) throws ClassNotFoundException, IOException {
+	public StandardSession load(String id) throws ClassNotFoundException, IOException {
 		/* default session */
 		StandardSession session = null;
 
