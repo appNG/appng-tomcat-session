@@ -1,6 +1,6 @@
 image::https://www.aiticon.com/assets/images/appng_logo_760px.jpg[]
 
-:version: 0.1.0-SNAPSHOT
+:version: 0.1.1-SNAPSHOT
 
 == appNG Tomcat Session
 This library contains implementations of http://tomcat.apache.org/[Apache Tomcat^]s https://tomcat.apache.org/tomcat-8.5-doc/api/org/apache/catalina/Manager.html[org.apache.catalina.Manager^] using https://redis.io/[Redis^] and https://www.mongodb.com[MongoDB^].
@@ -69,7 +69,7 @@ Add the following into your Tomcat `context.xml` (or the context block of the `s
 Copy the following files into the `TOMCAT_BASE/lib` directory:
 
 * appng-tomcat-session-{version}.jar
-* http://repo1.maven.org/maven2/org/mongodb/mongo-java-driver/3.5.0/mongo-java-driver-3.5.0.jar[mongo-java-driver-3.5.0.jarr^]
+* http://repo1.maven.org/maven2/org/mongodb/mongo-java-driver/3.5.0/mongo-java-driver-3.5.0.jar[mongo-java-driver-3.5.0.jar^]
 
 Reboot the server, and sessions should now be stored in MongoDB.
 

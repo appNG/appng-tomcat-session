@@ -21,6 +21,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 
 import org.apache.catalina.Container;
@@ -249,6 +250,9 @@ public class MongoStore extends StoreBase {
 
 		/* lookup the session */
 		DBObject mongoSession = this.collection.findOne(sessionQuery);
+		if (isDebugEnabled()) {
+			getLogger().debug("Loaded sesssion " + id + " (query: " + sessionQuery + ")");
+		}
 		if (mongoSession != null) {
 			/* get the properties from mongo */
 			byte[] data = (byte[]) mongoSession.get(sessionDataProperty);
@@ -265,6 +269,10 @@ public class MongoStore extends StoreBase {
 					session = (StandardSession) this.manager.createEmptySession();
 					session.readObjectData(ois);
 					session.setManager(this.manager);
+					if (isDebugEnabled()) {
+						getLogger().debug("loaded " + data.length + " bytes of data for session " + id
+								+ " (last modified: " + new Date(session.getLastAccessedTime()) + ")");
+					}
 				} catch (ReflectiveOperationException e1) {
 					throw new ClassNotFoundException("error loading session " + id, e1);
 				} finally {
@@ -298,6 +306,9 @@ public class MongoStore extends StoreBase {
 		/* remove all sessions for this context and id */
 		try {
 			this.collection.remove(sessionQuery);
+			if (isDebugEnabled()) {
+				getLogger().debug("removed session " + id + " (query: " + sessionQuery + ")");
+			}
 		} catch (MongoException e) {
 			/* for some reason we couldn't remove the data */
 			getLogger().error("Unable to remove sessions for [" + id + ":" + this.getName() + "] from MongoDB", e);
@@ -316,6 +327,7 @@ public class MongoStore extends StoreBase {
 		/* remove all sessions for this context */
 		try {
 			this.collection.remove(sessionQuery);
+			getLogger().debug("removed sessions (query: " + sessionQuery + ")");
 		} catch (MongoException e) {
 			/* for some reason we couldn't save the data */
 			getLogger().error("Unable to remove sessions for [" + this.getName() + "] from MongoDB", e);
@@ -360,6 +372,10 @@ public class MongoStore extends StoreBase {
 		try {
 			/* update the object in the collection, inserting if necessary */
 			this.collection.update(sessionQuery, mongoSession, true, false);
+			if (isDebugEnabled()) {
+				getLogger().debug("saved " + data.length + " bytes for session " + session.getIdInternal() + " (query: "
+						+ sessionQuery + ", lastModified: " + mongoSession.getDate(lastModifiedProperty) + ")");
+			}
 		} catch (MongoException e) {
 			/* for some reason we couldn't save the data */
 			getLogger().error("Unable to save session to MongoDB", e);
@@ -525,7 +541,10 @@ public class MongoStore extends StoreBase {
 
 	private Logger getLogger() {
 		return log;
-		// return this.manager.getContext().getLogger();
+	}
+
+	private boolean isDebugEnabled() {
+		return getLogger().isDebugEnabled();
 	}
 
 	public String getConnectionUri() {
