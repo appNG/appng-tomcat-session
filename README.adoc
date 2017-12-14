@@ -1,18 +1,21 @@
 image::https://www.aiticon.com/assets/images/appng_logo_760px.jpg[]
 
 :version: 0.1.1-SNAPSHOT
+::mongo-version: 3.5.0
 
 == appNG Tomcat Session
 This library contains implementations of http://tomcat.apache.org/[Apache Tomcat^]s https://tomcat.apache.org/tomcat-8.5-doc/api/org/apache/catalina/Manager.html[org.apache.catalina.Manager^] using https://redis.io/[Redis^] and https://www.mongodb.com[MongoDB^].
 
 == Prerequisites
-*Move* the following files from `APPNG_HOME/WEB-INF/lib` into the `CATALINA_HOME/lib` directory:
+By default, Tomcats uses it's own logging component named JULI, writing logfiles to `CATALINA_HOME/logs`.
+
+However, if you want to see some logging in the `appNG.log` of your appNG installation, *move* the following files from `APPNG_HOME/WEB-INF/lib` into the `CATALINA_HOME/lib` directory:
 
 * log4j-1.2.17.jar
 * slf4j-api-1.7.25.jar
 * slf4j-log4j12-1.7.25.jar
 
-In order to see some logging, set the category for `org.appng.tomcat.session` in `APPNG_HOME/WEB-INF/conf/log4j.properties`:
+Next, set the category for `org.appng.tomcat.session` in `APPNG_HOME/WEB-INF/conf/log4j.properties` to the required level:
 [source,plain]
 ----
 log4j.category.org.appng.tomcat.session = trace
@@ -69,7 +72,7 @@ Add the following into your Tomcat `context.xml` (or the context block of the `s
 Copy the following files into the `TOMCAT_BASE/lib` directory:
 
 * appng-tomcat-session-{version}.jar
-* http://repo1.maven.org/maven2/org/mongodb/mongo-java-driver/3.5.0/mongo-java-driver-3.5.0.jar[mongo-java-driver-3.5.0.jar^]
+* http://repo1.maven.org/maven2/org/mongodb/mongo-java-driver/{mongo-version}/mongo-java-driver-{mongo-version}.jar[mongo-java-driver-{mongo-version}.jar^]
 
 Reboot the server, and sessions should now be stored in MongoDB.
 

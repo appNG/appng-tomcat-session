@@ -24,16 +24,15 @@ import org.apache.catalina.Valve;
 import org.apache.catalina.connector.Request;
 import org.apache.catalina.connector.Response;
 import org.apache.catalina.valves.ValveBase;
+import org.apache.juli.logging.Log;
 import org.appng.tomcat.session.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A {@link Valve} that uses {@link RedisSessionManager} to store a {@link Session}
  */
 public class RedisSessionHandlerValve extends ValveBase {
 
-	private final Logger log = LoggerFactory.getLogger(RedisSessionHandlerValve.class);
+	private final Log log = Utils.getLog(RedisSessionHandlerValve.class);
 	private RedisSessionManager manager;
 
 	public void setRedisSessionManager(RedisSessionManager manager) {
@@ -50,7 +49,7 @@ public class RedisSessionHandlerValve extends ValveBase {
 			}
 			long duration = System.currentTimeMillis() - start;
 			if (log.isDebugEnabled() && duration > 0) {
-				log.debug("handling session for {} took {}ms", request.getServletPath(), duration);
+				log.debug(String.format("handling session for %s took %sms", request.getServletPath(), duration));
 			}
 		}
 	}

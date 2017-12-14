@@ -24,8 +24,33 @@ import java.util.Map;
 import javax.servlet.ServletContext;
 
 import org.apache.catalina.connector.Request;
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
 
 public class Utils {
+
+	private static Log internalLog = LogFactory.getLog(Utils.class);
+	private static Class<?> slf4jLoggerFactory;
+
+	static {
+		try {
+			slf4jLoggerFactory = Utils.class.getClassLoader().loadClass("org.slf4j.LoggerFactory");
+		} catch (ClassNotFoundException e) {
+			internalLog.info("org.slf4j.LoggerFactory not present");
+		}
+	}
+
+	public static Log getLog(Class<?> clazz) {
+		if (null != slf4jLoggerFactory) {
+			try {
+				Object slf4jLogger = slf4jLoggerFactory.getMethod("getLogger", Class.class).invoke(null, clazz);
+				return getSlf4jWrapper(clazz, slf4jLogger);
+			} catch (Exception e) {
+				LogFactory.getLog(Utils.class).error("error while retrieving slf4j logger", e);
+			}
+		}
+		return LogFactory.getLog(clazz);
+	}
 
 	public static boolean isTemplateRequest(Request request) {
 		return request.getServletPath().startsWith(getTemplatePrefix(request.getServletContext()));
@@ -65,6 +90,98 @@ public class Utils {
 			Thread.currentThread().setContextClassLoader(contextClassLoader);
 		}
 		return ois;
+	}
+
+	private static Log getSlf4jWrapper(Class<?> clazz, Object slf4jLogger) {
+		return new Log() {
+
+			@SuppressWarnings("unchecked")
+			private <T> T callRealMethod(String name, Object... args) {
+				try {
+					Class<?>[] types = new Class<?>[args.length];
+					for (int i = 0; i < types.length; i++) {
+						types[i] = args[i].getClass();
+					}
+					return (T) slf4jLogger.getClass().getMethod(name, types).invoke(slf4jLogger, args);
+				} catch (Exception e) {
+					LogFactory.getLog(clazz).error("error while using slf4j", e);
+				}
+				return null;
+			}
+
+			public void warn(Object message, Throwable t) {
+				callRealMethod("warn", message, t);
+			}
+
+			public void warn(Object message) {
+				callRealMethod("trace", message);
+			}
+
+			public void trace(Object message, Throwable t) {
+				callRealMethod("trace", message, t);
+			}
+
+			public void trace(Object message) {
+				callRealMethod("trace", message);
+			}
+
+			public boolean isWarnEnabled() {
+				return callRealMethod("isWarnEnabled");
+			}
+
+			public boolean isTraceEnabled() {
+				return callRealMethod("isTraceEnabled");
+			}
+
+			public boolean isInfoEnabled() {
+				return callRealMethod("isInfoEnabled");
+			}
+
+			public boolean isFatalEnabled() {
+				return isErrorEnabled();
+			}
+
+			public boolean isErrorEnabled() {
+				return callRealMethod("isErrorEnabled");
+			}
+
+			public boolean isDebugEnabled() {
+				return callRealMethod("isDebugEnabled");
+			}
+
+			public void info(Object message, Throwable t) {
+				callRealMethod("info", message, t);
+			}
+
+			public void info(Object message) {
+				callRealMethod("info", message);
+			}
+
+			public void fatal(Object message, Throwable t) {
+				error(message, t);
+			}
+
+			public void fatal(Object message) {
+				error(message);
+			}
+
+			public void error(Object message, Throwable t) {
+				callRealMethod("error", message, t);
+			}
+
+			public void error(Object message) {
+				callRealMethod("error", message);
+			}
+
+			public void debug(Object message, Throwable t) {
+				callRealMethod("debug", message, t);
+			}
+
+			public void debug(Object message) {
+				callRealMethod("debug", message);
+			}
+
+		};
 	}
 
 }

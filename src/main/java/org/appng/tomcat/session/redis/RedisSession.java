@@ -22,15 +22,15 @@ import java.util.HashMap;
 
 import org.apache.catalina.Manager;
 import org.apache.catalina.session.StandardSession;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.juli.logging.Log;
+import org.appng.tomcat.session.Utils;
 
 /**
  * A Redis-backed session
  */
 public class RedisSession extends StandardSession {
 
-	private final Logger log = LoggerFactory.getLogger(RedisSession.class);
+	private final Log log = Utils.getLog(RedisSession.class);
 
 	protected static Boolean manualDirtyTrackingSupportEnabled = true;
 

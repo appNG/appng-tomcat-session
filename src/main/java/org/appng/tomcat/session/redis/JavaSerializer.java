@@ -26,16 +26,15 @@ import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.juli.logging.Log;
 import org.appng.tomcat.session.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The default {@link Serializer} implementation
  */
 public class JavaSerializer implements Serializer {
 
-	private final Logger log = LoggerFactory.getLogger(JavaSerializer.class);
+	private final Log log = Utils.getLog(JavaSerializer.class);
 
 	private ClassLoader loader;
 

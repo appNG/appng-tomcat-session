@@ -31,9 +31,8 @@ import org.apache.catalina.Session;
 import org.apache.catalina.Store;
 import org.apache.catalina.session.StandardSession;
 import org.apache.catalina.session.StoreBase;
+import org.apache.juli.logging.Log;
 import org.appng.tomcat.session.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
@@ -54,7 +53,7 @@ import com.mongodb.WriteConcern;
  */
 public class MongoStore extends StoreBase {
 
-	private final Logger log = LoggerFactory.getLogger(MongoStore.class);
+	private final Log log = Utils.getLog(MongoPersistentManager.class);
 
 	/** Property used to store the Session's ID */
 	private static final String idProperty = "_id";
@@ -229,6 +228,7 @@ public class MongoStore extends StoreBase {
 	 * {@inheritDoc}
 	 */
 	public StandardSession load(String id) throws ClassNotFoundException, IOException {
+		long start = System.currentTimeMillis();
 		/* default session */
 		StandardSession session = null;
 
@@ -250,9 +250,6 @@ public class MongoStore extends StoreBase {
 
 		/* lookup the session */
 		DBObject mongoSession = this.collection.findOne(sessionQuery);
-		if (isDebugEnabled()) {
-			getLogger().debug("Loaded sesssion " + id + " (query: " + sessionQuery + ")");
-		}
 		if (mongoSession != null) {
 			/* get the properties from mongo */
 			byte[] data = (byte[]) mongoSession.get(sessionDataProperty);
@@ -270,8 +267,8 @@ public class MongoStore extends StoreBase {
 					session.readObjectData(ois);
 					session.setManager(this.manager);
 					if (isDebugEnabled()) {
-						getLogger().debug("loaded " + data.length + " bytes of data for session " + id
-								+ " (last modified: " + new Date(session.getLastAccessedTime()) + ")");
+						getLog().debug(String.format("Loaded session %s with query %s in %s ms (lastModified %s)", id,
+								session, System.currentTimeMillis() - start, new Date(session.getLastAccessedTime())));
 					}
 				} catch (ReflectiveOperationException e1) {
 					throw new ClassNotFoundException("error loading session " + id, e1);
@@ -307,11 +304,11 @@ public class MongoStore extends StoreBase {
 		try {
 			this.collection.remove(sessionQuery);
 			if (isDebugEnabled()) {
-				getLogger().debug("removed session " + id + " (query: " + sessionQuery + ")");
+				getLog().debug("removed session " + id + " (query: " + sessionQuery + ")");
 			}
 		} catch (MongoException e) {
 			/* for some reason we couldn't remove the data */
-			getLogger().error("Unable to remove sessions for [" + id + ":" + this.getName() + "] from MongoDB", e);
+			getLog().error("Unable to remove sessions for [" + id + ":" + this.getName() + "] from MongoDB", e);
 			throw e;
 		}
 	}
@@ -327,10 +324,10 @@ public class MongoStore extends StoreBase {
 		/* remove all sessions for this context */
 		try {
 			this.collection.remove(sessionQuery);
-			getLogger().debug("removed sessions (query: " + sessionQuery + ")");
+			getLog().debug("removed sessions (query: " + sessionQuery + ")");
 		} catch (MongoException e) {
 			/* for some reason we couldn't save the data */
-			getLogger().error("Unable to remove sessions for [" + this.getName() + "] from MongoDB", e);
+			getLog().error("Unable to remove sessions for [" + this.getName() + "] from MongoDB", e);
 			throw e;
 		}
 	}
@@ -339,6 +336,7 @@ public class MongoStore extends StoreBase {
 	 * {@inheritDoc}
 	 */
 	public void save(Session session) throws IOException {
+		long start = System.currentTimeMillis();
 		/*
 		 * we will store the session data as a byte array in Mongo, so we need to set up our output streams
 		 */
@@ -373,12 +371,13 @@ public class MongoStore extends StoreBase {
 			/* update the object in the collection, inserting if necessary */
 			this.collection.update(sessionQuery, mongoSession, true, false);
 			if (isDebugEnabled()) {
-				getLogger().debug("saved " + data.length + " bytes for session " + session.getIdInternal() + " (query: "
-						+ sessionQuery + ", lastModified: " + mongoSession.getDate(lastModifiedProperty) + ")");
+				getLog().debug(String.format("Saved session %s with query %s in %s ms (lastModified %s)",
+						session.getId(), sessionQuery, System.currentTimeMillis() - start,
+						mongoSession.getDate(lastModifiedProperty)));
 			}
 		} catch (MongoException e) {
 			/* for some reason we couldn't save the data */
-			getLogger().error("Unable to save session to MongoDB", e);
+			getLog().error("Unable to save session to MongoDB", e);
 			throw e;
 		} finally {
 			if (oos != null) {
@@ -480,14 +479,13 @@ public class MongoStore extends StoreBase {
 					hosts.add(address);
 				}
 
-				getLogger()
-						.info(getStoreName() + "[" + this.getName() + "]: Connecting to MongoDB [" + this.hosts + "]");
+				getLog().info(getStoreName() + "[" + this.getName() + "]: Connecting to MongoDB [" + this.hosts + "]");
 
 				/* connect */
 				List<MongoCredential> credentials = new ArrayList<MongoCredential>();
 				/* see if we need to authenticate */
 				if (this.username != null || this.password != null) {
-					getLogger().info(
+					getLog().info(
 							getStoreName() + "[" + this.getName() + "]: Authenticating using [" + this.username + "]");
 					for (int i = 0; i < hosts.size(); i++) {
 						credentials.add(MongoCredential.createCredential(username, dbName, password.toCharArray()));
@@ -497,12 +495,12 @@ public class MongoStore extends StoreBase {
 			}
 
 			/* get a connection to our db */
-			getLogger().info(getStoreName() + "[" + this.getName() + "]: Using Database [" + this.dbName + "]");
+			getLog().info(getStoreName() + "[" + this.getName() + "]: Using Database [" + this.dbName + "]");
 			this.db = this.mongoClient.getDB(this.dbName);
 
 			/* get a reference to the collection */
 			this.collection = this.db.getCollection(this.collectionName);
-			getLogger().info(getStoreName() + "[" + this.getName() + "]: Preparing indexes");
+			getLog().info(getStoreName() + "[" + this.getName() + "]: Preparing indexes");
 
 			/* drop any existing indexes */
 			try {
@@ -532,19 +530,19 @@ public class MongoStore extends StoreBase {
 				}
 			}
 
-			getLogger().info(getStoreName() + "[" + this.getName() + "]: Store ready.");
+			getLog().info(getStoreName() + "[" + this.getName() + "]: Store ready.");
 		} catch (MongoException me) {
-			getLogger().error("Unable to Connect to MongoDB", me);
+			getLog().error("Unable to Connect to MongoDB", me);
 			throw new LifecycleException(me);
 		}
 	}
 
-	private Logger getLogger() {
+	private Log getLog() {
 		return log;
 	}
 
 	private boolean isDebugEnabled() {
-		return getLogger().isDebugEnabled();
+		return getLog().isDebugEnabled();
 	}
 
 	public String getConnectionUri() {

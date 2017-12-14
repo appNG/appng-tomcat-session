@@ -31,8 +31,8 @@ import org.apache.catalina.Manager;
 import org.apache.catalina.Session;
 import org.apache.catalina.Valve;
 import org.apache.catalina.session.ManagerBase;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.juli.logging.Log;
+import org.appng.tomcat.session.Utils;
 
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -42,7 +42,7 @@ import redis.clients.jedis.Protocol;
 import redis.clients.util.Pool;
 
 /**
- * A {@link Manager} that uses Redis to store its {@link Session}s 
+ * A {@link Manager} that uses Redis to store its {@link Session}s
  */
 public class RedisSessionManager extends ManagerBase implements Lifecycle {
 
@@ -62,7 +62,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 
 	protected byte[] NULL_SESSION = "null".getBytes();
 
-	private final Logger log = LoggerFactory.getLogger(RedisSessionManager.class);
+	private final Log log = Utils.getLog(RedisSessionManager.class);
 
 	protected String host = "localhost";
 	protected int port = 6379;
@@ -560,10 +560,10 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 							(sessionAttributesHash = serializer.attributesHashFrom(redisSession)))) {
 
 				if (log.isTraceEnabled()) {
-					log.trace(
-							"Save was determined to be necessary: force:{}, dirty: {}, isPersisted {}, hashesEqual {}",
+					log.trace(String.format(
+							"Save was determined to be necessary: force:%s, dirty: %s, isPersisted %s, hashesEqual %s",
 							forceSave, redisSession.isDirty(), this.currentSessionIsPersisted.get(),
-							Arrays.equals(originalSessionAttributesHash, sessionAttributesHash));
+							Arrays.equals(originalSessionAttributesHash, sessionAttributesHash)));
 				}
 				if (null == sessionAttributesHash) {
 					sessionAttributesHash = serializer.attributesHashFrom(redisSession);
@@ -600,7 +600,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 			while (en.hasMoreElements()) {
 				sb.append(redisSession.getAttribute(en.nextElement()).toString());
 			}
-			log.trace("Session Contents [{}]: {}", redisSession, sb.toString());
+			log.trace(String.format("Session Contents [%s]: %s", redisSession, sb.toString()));
 		}
 	}
 
@@ -632,11 +632,11 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 		if (redisSession != null) {
 			try {
 				if (redisSession.isValid()) {
-					log.trace("Request with session completed, saving session {}", redisSession);
+					log.trace(String.format("Request with session completed, saving session %s", redisSession));
 					redisSession.endAccess();
 					save(redisSession, getAlwaysSaveAfterRequest());
 				} else {
-					log.trace("HTTP Session has been invalidated, removing {}", redisSession);
+					log.trace(String.format("HTTP Session has been invalidated, removing %s", redisSession));
 					remove(redisSession);
 				}
 			} catch (Exception e) {
@@ -645,7 +645,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 				currentSession.remove();
 				currentSessionId.remove();
 				currentSessionIsPersisted.remove();
-				log.trace("Session removed from ThreadLocal {}", redisSession);
+				log.trace(String.format("Session removed from ThreadLocal %s", redisSession));
 			}
 		}
 	}
@@ -661,7 +661,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 			jedis = acquireConnection();
 			Set<String> sessionIds = jedis.keys("*");
 			if (log.isDebugEnabled()) {
-				log.debug("Starting to expire sessions, checking {}", sessionIds.size());
+				log.debug(String.format("Starting to expire sessions, checking %s", sessionIds.size()));
 			}
 			for (String sessionId : sessionIds) {
 				try {
@@ -672,7 +672,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 						expired++;
 					}
 				} catch (IOException | ReflectiveOperationException e) {
-					log.error("error reading session", sessionId);
+					log.error(String.format("error reading session %s", sessionId));
 					jedis.del(sessionId.getBytes());
 				}
 			}
@@ -685,7 +685,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 
 		long duration = System.currentTimeMillis() - timeStart;
 		if (log.isDebugEnabled()) {
-			log.debug("Expired {} sessions in {}ms", expired, duration);
+			log.debug(String.format("Expired %s sessions in %sms", expired, duration));
 		}
 		processingTime += duration;
 	}

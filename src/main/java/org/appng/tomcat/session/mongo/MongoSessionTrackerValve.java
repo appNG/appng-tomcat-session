@@ -23,17 +23,16 @@ import org.apache.catalina.Session;
 import org.apache.catalina.Valve;
 import org.apache.catalina.connector.Request;
 import org.apache.catalina.connector.Response;
-import org.apache.catalina.valves.ValveBase;
+import org.apache.catalina.valves.PersistentValve;
+import org.apache.juli.logging.Log;
 import org.appng.tomcat.session.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A {@link Valve} that uses {@link MongoPersistentManager} to store a {@link Session}
  */
-public class MongoSessionTrackerValve extends ValveBase {
+public class MongoSessionTrackerValve extends PersistentValve {
 
-	private final Logger log = LoggerFactory.getLogger(MongoSessionTrackerValve.class);
+	private final Log log = Utils.getLog(MongoPersistentManager.class);
 
 	public void invoke(Request request, Response response) throws IOException, ServletException {
 		try {
@@ -45,7 +44,7 @@ public class MongoSessionTrackerValve extends ValveBase {
 			}
 			long duration = System.currentTimeMillis() - start;
 			if (log.isDebugEnabled() && duration > 0) {
-				log.debug("handling session for {} took {}ms", request.getServletPath(), duration);
+				log.debug(String.format("handling session for %s took %sms", request.getServletPath(), duration));
 			}
 		}
 	}
@@ -55,10 +54,10 @@ public class MongoSessionTrackerValve extends ValveBase {
 		if (sessionInternal != null) {
 			MongoPersistentManager manager = (MongoPersistentManager) request.getContext().getManager();
 			if (sessionInternal.isValid()) {
-				log.debug("Request with session completed, saving session {}", sessionInternal.getId());
+				log.debug(String.format("Request with session completed, saving session %s", sessionInternal.getId()));
 				manager.getStore().save(sessionInternal);
 			} else {
-				log.debug("HTTP Session has been invalidated, removing {}", sessionInternal.getId());
+				log.debug(String.format("HTTP Session has been invalidated, removing %s", sessionInternal.getId()));
 				manager.remove(sessionInternal);
 			}
 		}
