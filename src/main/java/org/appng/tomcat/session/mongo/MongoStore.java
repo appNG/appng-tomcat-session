@@ -53,7 +53,7 @@ import com.mongodb.WriteConcern;
  */
 public class MongoStore extends StoreBase {
 
-	private final Log log = Utils.getLog(MongoPersistentManager.class);
+	private final Log log = Utils.getLog(MongoStore.class);
 
 	/** Property used to store the Session's ID */
 	private static final String idProperty = "_id";

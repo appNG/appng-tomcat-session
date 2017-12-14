@@ -32,7 +32,7 @@ import org.appng.tomcat.session.Utils;
  */
 public class MongoSessionTrackerValve extends PersistentValve {
 
-	private final Log log = Utils.getLog(MongoPersistentManager.class);
+	private final Log log = Utils.getLog(MongoSessionTrackerValve.class);
 
 	public void invoke(Request request, Response response) throws IOException, ServletException {
 		try {
