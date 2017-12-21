@@ -1,7 +1,7 @@
 image::https://www.aiticon.com/assets/images/appng_logo_760px.jpg[]
 
 :version: 0.1.1-SNAPSHOT
-::mongo-version: 3.5.0
+:mongo-version: 3.5.0
 
 == appNG Tomcat Session
 This library contains implementations of http://tomcat.apache.org/[Apache Tomcat^]s https://tomcat.apache.org/tomcat-8.5-doc/api/org/apache/catalina/Manager.html[org.apache.catalina.Manager^] using https://redis.io/[Redis^] and https://www.mongodb.com[MongoDB^].
