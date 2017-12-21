@@ -15,13 +15,21 @@
  */
 package org.appng.tomcat.session.mongo;
 
+import java.io.IOException;
+
+import org.apache.catalina.LifecycleException;
 import org.apache.catalina.Manager;
+import org.apache.catalina.Session;
 import org.apache.catalina.session.PersistentManagerBase;
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
 
 /**
  * A {@link Manager} implementation that uses a {@link MongoStore}
  */
 public final class MongoPersistentManager extends PersistentManagerBase {
+
+	private static final Log log = LogFactory.getLog(MongoPersistentManager.class);
 
 	/**
 	 * The descriptive information about this implementation.
@@ -54,4 +62,32 @@ public final class MongoPersistentManager extends PersistentManagerBase {
 		return (MongoStore) super.getStore();
 	}
 
+	@Override
+	public void add(Session session) {
+		// do nothing, we don't want to use Map<String,Session> sessions!
+	}
+
+	@Override
+	public void remove(Session session, boolean update) {
+		// avoid super.remove
+		removeSession(session.getId());
+	}
+
+	@Override
+	public Session findSession(String id) throws IOException {
+		// do not call super, instead load the session directly from the store
+		return getStore().load(id);
+	}
+
+	protected synchronized void startInternal() throws LifecycleException {
+		log.info("[" + this.getName() + "]: Starting.");
+		super.startInternal();
+	}
+
+	protected synchronized void stopInternal() throws LifecycleException {
+		log.info("[" + this.getName() + "]: Stopping.");
+		super.stopInternal();
+	}
+
 }
+
