@@ -75,8 +75,14 @@ public final class MongoPersistentManager extends PersistentManagerBase {
 
 	@Override
 	public Session findSession(String id) throws IOException {
+		Session session = null;
 		// do not call super, instead load the session directly from the store
-		return getStore().load(id);
+		try {
+			session = getStore().load(id);
+		} catch (ClassNotFoundException e) {
+			throw new IOException("error loading class for session " + id, e);
+		}
+		return session;
 	}
 
 	protected synchronized void startInternal() throws LifecycleException {
@@ -90,4 +96,3 @@ public final class MongoPersistentManager extends PersistentManagerBase {
 	}
 
 }
-
