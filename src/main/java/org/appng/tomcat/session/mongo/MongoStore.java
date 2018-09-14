@@ -70,6 +70,9 @@ public class MongoStore extends StoreBase {
 	/** Property used to store the Session's data. */
 	protected static final String sessionDataProperty = "data";
 
+	/** Property used to store the name of the thread that loaded the session at last */
+	private static final String THREAD_PROPERTY = "thread";
+
 	/** Default Name of the Collection where the Sessions will be stored. */
 	protected static final String sessionCollectionName = "tomcat.sessions";
 
@@ -155,6 +158,17 @@ public class MongoStore extends StoreBase {
 
 	/** Mongo Collection for the Sessions */
 	protected DBCollection collection;
+
+	/**
+	 * The maximum time to wait when reading a session that is still used by another thread. 0 means: Don't wait at all.
+	 */
+	protected long maxWaitTime = 5000;
+
+	/** The time to wait in one iteration when reading a session that is still used by another thread */
+	protected long waitTime = 50;
+	
+	// Tomcat's background thread that expires sessions
+	private static final String CONTAINER_BACKGROUND_PROCESSOR = "ContainerBackgroundProcessor";
 
 	/**
 	 * Retrieve the unique Context name for this Manager. This will be used to separate out sessions from different
@@ -251,6 +265,24 @@ public class MongoStore extends StoreBase {
 		/* lookup the session */
 		DBObject mongoSession = this.collection.findOne(sessionQuery);
 		if (mongoSession != null) {
+			boolean waitingEnabled = maxWaitTime > 0;
+			if (waitingEnabled) {
+				long waited = 0;
+				while (mongoSession.containsField(THREAD_PROPERTY) && !String.class
+						.cast(mongoSession.get(THREAD_PROPERTY)).startsWith(CONTAINER_BACKGROUND_PROCESSOR)
+						&& waited < maxWaitTime) {
+					try {
+						Thread.sleep(waitTime);
+						waited += waitTime;
+					} catch (InterruptedException e) {
+						// ignore
+					}
+					getLog().debug(String.format("Session %s is still used by Thread %s", id,
+							mongoSession.get(THREAD_PROPERTY)));
+					mongoSession = this.collection.findOne(sessionQuery);
+				}
+			}
+
 			/* get the properties from mongo */
 			byte[] data = (byte[]) mongoSession.get(sessionDataProperty);
 
@@ -266,6 +298,12 @@ public class MongoStore extends StoreBase {
 					session = (StandardSession) this.manager.createEmptySession();
 					session.readObjectData(ois);
 					session.setManager(this.manager);
+
+					if (waitingEnabled) {
+						this.collection.update(sessionQuery, new BasicDBObject("$set",
+								new BasicDBObject(THREAD_PROPERTY, Thread.currentThread().getName())));
+					}
+
 					if (isDebugEnabled()) {
 						getLog().debug(String.format("Loaded session %s with query %s in %s ms (lastModified %s)", id,
 								session, System.currentTimeMillis() - start, new Date(session.getLastAccessedTime())));
@@ -663,6 +701,22 @@ public class MongoStore extends StoreBase {
 
 	public void setTimeToLive(int timeToLive) {
 		this.timeToLive = timeToLive;
+	}
+
+	public long getMaxWaitTime() {
+		return maxWaitTime;
+	}
+
+	public void setMaxWaitTime(long maxWaitTime) {
+		this.maxWaitTime = maxWaitTime;
+	}
+
+	public long getWaitTime() {
+		return waitTime;
+	}
+
+	public void setWaitTime(long waitTime) {
+		this.waitTime = waitTime;
 	}
 
 }
