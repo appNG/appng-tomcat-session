@@ -166,7 +166,12 @@ public class MongoStore extends StoreBase {
 
 	/** The time to wait in one iteration when reading a session that is still used by another thread */
 	protected long waitTime = 50;
-	
+
+	/**
+	 * The session timeout in minutes
+	 */
+	protected int sessionTimeout = 30;
+
 	// Tomcat's background thread that expires sessions
 	private static final String CONTAINER_BACKGROUND_PROCESSOR = "ContainerBackgroundProcessor";
 
@@ -238,6 +243,22 @@ public class MongoStore extends StoreBase {
 		return keys.toArray(new String[keys.size()]);
 	}
 
+	@Override
+	public void processExpires() {
+		getLog().info("processExpires");
+		BasicDBObject sessionsToExpire = new BasicDBObject();
+		long thirtyMinutes = System.currentTimeMillis() - sessionTimeout * 60 * 1000;
+		sessionsToExpire.put(lastModifiedProperty, new BasicDBObject("$lte", new Date(thirtyMinutes)));
+		DBCursor toExpire = this.collection.find(sessionsToExpire);
+		while (toExpire.hasNext()) {
+			DBObject session = toExpire.next();
+			Object id = session.get(idProperty);
+			Object lastModified = session.get(lastModifiedProperty);
+			debug("Expiring session %s last accessed at %s", id, lastModified);
+			this.collection.remove(session);
+		}
+	}
+
 	/**
 	 * {@inheritDoc}
 	 */
@@ -254,7 +275,8 @@ public class MongoStore extends StoreBase {
 		 * store a reference to the old class loader, as we will change this thread's current context if we need to load
 		 * custom classes
 		 */
-		ClassLoader managerContextLoader = Thread.currentThread().getContextClassLoader();
+		Thread currentThread = Thread.currentThread();
+		ClassLoader managerContextLoader = currentThread.getContextClassLoader();
 		ClassLoader appContextLoader = context.getLoader().getClassLoader();
 
 		/* locate the session, by id, in the collection */
@@ -264,64 +286,52 @@ public class MongoStore extends StoreBase {
 
 		/* lookup the session */
 		DBObject mongoSession = this.collection.findOne(sessionQuery);
-		if (mongoSession != null) {
-			boolean waitingEnabled = maxWaitTime > 0;
-			if (waitingEnabled) {
-				long waited = 0;
-				while (mongoSession.containsField(THREAD_PROPERTY) && !String.class
-						.cast(mongoSession.get(THREAD_PROPERTY)).startsWith(CONTAINER_BACKGROUND_PROCESSOR)
-						&& waited < maxWaitTime) {
-					try {
-						Thread.sleep(waitTime);
-						waited += waitTime;
-					} catch (InterruptedException e) {
-						// ignore
-					}
-					getLog().debug(String.format("Session %s is still used by Thread %s", id,
-							mongoSession.get(THREAD_PROPERTY)));
-					mongoSession = this.collection.findOne(sessionQuery);
-				}
+
+		long waited = 0;
+		while (waited < maxWaitTime && (null == mongoSession || (mongoSession.containsField(THREAD_PROPERTY)))) {
+			if (null == mongoSession) {
+				debug("Session %s has not (yet) been found.", id);
+			} else {
+				debug("Session %s is still used by Thread %s", id, mongoSession.get(THREAD_PROPERTY));
 			}
+			try {
+				Thread.sleep(waitTime);
+				waited += waitTime;
+			} catch (InterruptedException e) {
+				// ignore
+			}
+			mongoSession = this.collection.findOne(sessionQuery);
+		}
+		if (null == mongoSession) {
+			throw new IOException(String.format("Failed to load session %s", id));
+		}
 
-			/* get the properties from mongo */
-			byte[] data = (byte[]) mongoSession.get(sessionDataProperty);
+		/* get the properties from mongo */
+		byte[] data = (byte[]) mongoSession.get(sessionDataProperty);
 
-			if (data != null) {
-				ObjectInputStream ois = null;
+		if (data != null) {
+			currentThread.setContextClassLoader(appContextLoader);
+			try (ObjectInputStream ois = Utils.getObjectInputStream(appContextLoader,
+					manager.getContext().getServletContext(), data)) {
 
-				try {
-					/* load the data into an input stream */
-					Thread.currentThread().setContextClassLoader(appContextLoader);
-					ois = Utils.getObjectInputStream(appContextLoader, manager.getContext().getServletContext(), data);
+				/* create a new session */
+				session = (StandardSession) this.manager.createEmptySession();
+				session.readObjectData(ois);
+				session.setManager(this.manager);
 
-					/* create a new session */
-					session = (StandardSession) this.manager.createEmptySession();
-					session.readObjectData(ois);
-					session.setManager(this.manager);
-
-					if (waitingEnabled) {
-						this.collection.update(sessionQuery, new BasicDBObject("$set",
-								new BasicDBObject(THREAD_PROPERTY, Thread.currentThread().getName())));
-					}
-
-					if (isDebugEnabled()) {
-						getLog().debug(String.format("Loaded session %s with query %s in %s ms (lastModified %s)", id,
-								session, System.currentTimeMillis() - start, new Date(session.getLastAccessedTime())));
-					}
-				} catch (ReflectiveOperationException e1) {
-					throw new ClassNotFoundException("error loading session " + id, e1);
-				} finally {
-					if (ois != null) {
-						try {
-							ois.close();
-							ois = null;
-						} catch (Exception e) {
-						}
-					}
-
-					/* restore the class loader */
-					Thread.currentThread().setContextClassLoader(managerContextLoader);
+				if (!currentThread.getName().startsWith(CONTAINER_BACKGROUND_PROCESSOR)) {
+					this.collection.update(sessionQuery,
+							new BasicDBObject("$set", new BasicDBObject(THREAD_PROPERTY, currentThread.getName())));
+					debug("Session %s is now owned by thread %s", id, currentThread.getName());
 				}
+
+				debug("Loaded session %s with query %s in %s ms (lastModified %s)", id, sessionQuery,
+						System.currentTimeMillis() - start, new Date(session.getLastAccessedTime()));
+			} catch (ReflectiveOperationException e1) {
+				throw new ClassNotFoundException("error loading session " + id, e1);
+			} finally {
+				/* restore the class loader */
+				currentThread.setContextClassLoader(managerContextLoader);
 			}
 		}
 
@@ -341,9 +351,7 @@ public class MongoStore extends StoreBase {
 		/* remove all sessions for this context and id */
 		try {
 			this.collection.remove(sessionQuery);
-			if (isDebugEnabled()) {
-				getLog().debug("removed session " + id + " (query: " + sessionQuery + ")");
-			}
+			debug("removed session %s (query: %s)", id, sessionQuery);
 		} catch (MongoException e) {
 			/* for some reason we couldn't remove the data */
 			getLog().error("Unable to remove sessions for [" + id + ":" + this.getName() + "] from MongoDB", e);
@@ -362,7 +370,7 @@ public class MongoStore extends StoreBase {
 		/* remove all sessions for this context */
 		try {
 			this.collection.remove(sessionQuery);
-			getLog().debug("removed sessions (query: " + sessionQuery + ")");
+			debug("removed sessions (query: %s)", sessionQuery);
 		} catch (MongoException e) {
 			/* for some reason we couldn't save the data */
 			getLog().error("Unable to remove sessions for [" + this.getName() + "] from MongoDB", e);
@@ -408,11 +416,8 @@ public class MongoStore extends StoreBase {
 		try {
 			/* update the object in the collection, inserting if necessary */
 			this.collection.update(sessionQuery, mongoSession, true, false);
-			if (isDebugEnabled()) {
-				getLog().debug(String.format("Saved session %s with query %s in %s ms (lastModified %s)",
-						session.getId(), sessionQuery, System.currentTimeMillis() - start,
-						mongoSession.getDate(lastModifiedProperty)));
-			}
+			debug("Saved session %s with query %s in %s ms (lastModified %s)", session.getId(), sessionQuery,
+					System.currentTimeMillis() - start, mongoSession.getDate(lastModifiedProperty));
 		} catch (MongoException e) {
 			/* for some reason we couldn't save the data */
 			getLog().error("Unable to save session to MongoDB", e);
@@ -432,6 +437,12 @@ public class MongoStore extends StoreBase {
 				} catch (Exception e) {
 				}
 			}
+		}
+	}
+
+	private void debug(String message, Object... args) {
+		if (getLog().isDebugEnabled()) {
+			getLog().debug(String.format(message, args));
 		}
 	}
 
@@ -579,10 +590,6 @@ public class MongoStore extends StoreBase {
 		return log;
 	}
 
-	private boolean isDebugEnabled() {
-		return getLog().isDebugEnabled();
-	}
-
 	public String getConnectionUri() {
 		return connectionUri;
 	}
@@ -717,6 +724,14 @@ public class MongoStore extends StoreBase {
 
 	public void setWaitTime(long waitTime) {
 		this.waitTime = waitTime;
+	}
+
+	public int getSessionTimeout() {
+		return sessionTimeout;
+	}
+
+	public void setSessionTimeout(int sessionTimeout) {
+		this.sessionTimeout = sessionTimeout;
 	}
 
 }
