@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.catalina.Container;
 import org.apache.catalina.Context;
@@ -167,11 +168,6 @@ public class MongoStore extends StoreBase {
 	/** The time to wait in one iteration when reading a session that is still used by another thread */
 	protected long waitTime = 50;
 
-	/**
-	 * The session timeout in minutes
-	 */
-	protected int sessionTimeout = 30;
-
 	// Tomcat's background thread that expires sessions
 	private static final String CONTAINER_BACKGROUND_PROCESSOR = "ContainerBackgroundProcessor";
 
@@ -246,15 +242,18 @@ public class MongoStore extends StoreBase {
 	@Override
 	public void processExpires() {
 		getLog().info("processExpires");
-		BasicDBObject sessionsToExpire = new BasicDBObject();
-		long thirtyMinutes = System.currentTimeMillis() - sessionTimeout * 60 * 1000;
-		sessionsToExpire.put(lastModifiedProperty, new BasicDBObject("$lte", new Date(thirtyMinutes)));
-		DBCursor toExpire = this.collection.find(sessionsToExpire);
+		int sessionTimeout = this.manager.getContext().getSessionTimeout();
+		long timeoutMillis = System.currentTimeMillis() - TimeUnit.MILLISECONDS.toMillis(sessionTimeout);
+		BasicDBObject expireQuery = new BasicDBObject(lastModifiedProperty,
+				new BasicDBObject("$lte", new Date(timeoutMillis)));
+		DBCursor toExpire = this.collection.find(expireQuery);
+		debug("Found %s sessions to expire with query: %s", toExpire.size(), expireQuery);
 		while (toExpire.hasNext()) {
 			DBObject session = toExpire.next();
 			Object id = session.get(idProperty);
-			Object lastModified = session.get(lastModifiedProperty);
-			debug("Expiring session %s last accessed at %s", id, lastModified);
+			Date lastModified = (Date) session.get(lastModifiedProperty);
+			long ageMinutes = TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - lastModified.getTime());
+			debug("Expiring session %s last accessed at %s (age: %sminutes)", id, lastModified, ageMinutes);
 			this.collection.remove(session);
 		}
 	}
@@ -386,34 +385,27 @@ public class MongoStore extends StoreBase {
 		/*
 		 * we will store the session data as a byte array in Mongo, so we need to set up our output streams
 		 */
-		ByteArrayOutputStream bos = new ByteArrayOutputStream();
-		ObjectOutputStream oos = new ObjectOutputStream(bos);
+		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
 
-		/* serialize the session using the object output stream */
-		((StandardSession) session).writeObjectData(oos);
+			/* serialize the session using the object output stream */
+			((StandardSession) session).writeObjectData(oos);
 
-		/* get the byte array of the data */
-		byte[] data = bos.toByteArray();
+			/* get the byte array of the data */
+			byte[] data = bos.toByteArray();
 
-		/* close the streams */
-		try {
-			oos.close();
-			oos = null;
-		} catch (Exception e) {
-		}
+			/* create the DBObject */
+			BasicDBObject mongoSession = new BasicDBObject();
+			mongoSession.put(idProperty, session.getIdInternal());
+			mongoSession.put(appContextProperty, this.getName());
+			mongoSession.put(creationTimeProperty, session.getCreationTime());
+			mongoSession.put(sessionDataProperty, data);
+			mongoSession.put(lastModifiedProperty, Calendar.getInstance().getTime());
 
-		/* create the DBObject */
-		BasicDBObject mongoSession = new BasicDBObject();
-		mongoSession.put(idProperty, session.getIdInternal());
-		mongoSession.put(appContextProperty, this.getName());
-		mongoSession.put(creationTimeProperty, session.getCreationTime());
-		mongoSession.put(sessionDataProperty, data);
-		mongoSession.put(lastModifiedProperty, Calendar.getInstance().getTime());
+			/* create our upsert lookup */
+			BasicDBObject sessionQuery = new BasicDBObject();
+			sessionQuery.put(idProperty, session.getId());
 
-		/* create our upsert lookup */
-		BasicDBObject sessionQuery = new BasicDBObject();
-		sessionQuery.put(idProperty, session.getId());
-		try {
 			/* update the object in the collection, inserting if necessary */
 			this.collection.update(sessionQuery, mongoSession, true, false);
 			debug("Saved session %s with query %s in %s ms (lastModified %s)", session.getId(), sessionQuery,
@@ -422,21 +414,6 @@ public class MongoStore extends StoreBase {
 			/* for some reason we couldn't save the data */
 			getLog().error("Unable to save session to MongoDB", e);
 			throw e;
-		} finally {
-			if (oos != null) {
-				try {
-					oos.close();
-					oos = null;
-				} catch (Exception e) {
-				}
-			}
-			if (bos != null) {
-				try {
-					bos.close();
-					bos = null;
-				} catch (Exception e) {
-				}
-			}
 		}
 	}
 
@@ -552,8 +529,9 @@ public class MongoStore extends StoreBase {
 			getLog().info(getStoreName() + "[" + this.getName() + "]: Preparing indexes");
 
 			/* drop any existing indexes */
+			BasicDBObject lastModifiedIndex = new BasicDBObject(lastModifiedProperty, 1);
 			try {
-				this.collection.dropIndex(new BasicDBObject(lastModifiedProperty, 1));
+				this.collection.dropIndex(lastModifiedIndex);
 				this.collection.dropIndex(new BasicDBObject(appContextProperty, 1));
 			} catch (Exception e) {
 				/* these indexes may not exist, so ignore */
@@ -565,17 +543,17 @@ public class MongoStore extends StoreBase {
 			/* determine if we need to expire our db sessions */
 			if (this.timeToLive != -1) {
 				/* use the time to live set */
-				this.collection.createIndex(new BasicDBObject(lastModifiedProperty, 1),
-						new BasicDBObject("lastModifiedProperty", this.timeToLive));
+				this.collection.createIndex(lastModifiedIndex,
+						new BasicDBObject("expireAfterSeconds", this.timeToLive));
 			} else {
 				/* no custom time to live specified, use the manager's settings */
 				if (this.manager.getContext().getSessionTimeout() != -1) {
 					/* create a ttl index on the app property */
-					this.collection.createIndex(new BasicDBObject(lastModifiedProperty, 1),
-							new BasicDBObject("lastModifiedProperty", this.manager.getContext().getSessionTimeout()));
+					this.collection.createIndex(lastModifiedIndex, new BasicDBObject("expireAfterSeconds",
+							TimeUnit.MINUTES.toSeconds(this.manager.getContext().getSessionTimeout())));
 				} else {
 					/* create a regular index */
-					this.collection.createIndex(new BasicDBObject(lastModifiedProperty, 1));
+					this.collection.createIndex(lastModifiedIndex);
 				}
 			}
 
@@ -724,14 +702,6 @@ public class MongoStore extends StoreBase {
 
 	public void setWaitTime(long waitTime) {
 		this.waitTime = waitTime;
-	}
-
-	public int getSessionTimeout() {
-		return sessionTimeout;
-	}
-
-	public void setSessionTimeout(int sessionTimeout) {
-		this.sessionTimeout = sessionTimeout;
 	}
 
 }
