@@ -243,7 +243,7 @@ public class MongoStore extends StoreBase {
 	public void processExpires() {
 		getLog().info("processExpires");
 		int sessionTimeout = this.manager.getContext().getSessionTimeout();
-		long timeoutMillis = System.currentTimeMillis() - TimeUnit.MILLISECONDS.toMillis(sessionTimeout);
+		long timeoutMillis = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(sessionTimeout);
 		BasicDBObject expireQuery = new BasicDBObject(lastModifiedProperty,
 				new BasicDBObject("$lte", new Date(timeoutMillis)));
 		DBCursor toExpire = this.collection.find(expireQuery);
