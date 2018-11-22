@@ -45,9 +45,12 @@ import com.mongodb.MongoClientOptions;
 import com.mongodb.MongoClientURI;
 import com.mongodb.MongoCredential;
 import com.mongodb.MongoException;
+import com.mongodb.ReadConcern;
+import com.mongodb.ReadConcernLevel;
 import com.mongodb.ReadPreference;
 import com.mongodb.ServerAddress;
 import com.mongodb.WriteConcern;
+import com.mongodb.WriteResult;
 
 /**
  * A {@link Store} implementation backed by MongoDB.
@@ -148,8 +151,8 @@ public class MongoStore extends StoreBase {
 	/** Controls if the MongoClient will write to slaves. Equivalent to <em>slaveOk</em>. Defaults to false. */
 	protected boolean useSlaves = false;
 
-	/** Controls what {@link WriteConcern} the MongoClient will use. Defaults to "ACKNOWLEDGED" */
-	protected WriteConcern writeConcern = WriteConcern.ACKNOWLEDGED;
+	/** Controls what {@link WriteConcern} the MongoClient will use. Defaults to {@link WriteConcern#MAJORITYs} */
+	protected WriteConcern writeConcern = WriteConcern.MAJORITY;
 
 	/** {@link MongoClient} instance to use. */
 	protected MongoClient mongoClient;
@@ -168,8 +171,11 @@ public class MongoStore extends StoreBase {
 	/** The time to wait in one iteration when reading a session that is still used by another thread */
 	protected long waitTime = 50;
 
-	// Tomcat's background thread that expires sessions
-	private static final String CONTAINER_BACKGROUND_PROCESSOR = "ContainerBackgroundProcessor";
+	/** The {@link ReadPreference}, using {@link ReadPreference#primary()} for maximum consistency by default */
+	protected ReadPreference readPreference = ReadPreference.primary();
+
+	/** The {@link ReadConcern}, using {@link ReadConcern#MAJORITY} for maximum consistency by default */
+	protected ReadConcern readConcern = ReadConcern.MAJORITY;
 
 	/**
 	 * Retrieve the unique Context name for this Manager. This will be used to separate out sessions from different
@@ -318,14 +324,12 @@ public class MongoStore extends StoreBase {
 				session.readObjectData(ois);
 				session.setManager(this.manager);
 
-				if (!currentThread.getName().startsWith(CONTAINER_BACKGROUND_PROCESSOR)) {
-					this.collection.update(sessionQuery,
-							new BasicDBObject("$set", new BasicDBObject(THREAD_PROPERTY, currentThread.getName())));
-					debug("Session %s is now owned by thread %s", id, currentThread.getName());
-				}
+				this.collection.update(sessionQuery,
+						new BasicDBObject("$set", new BasicDBObject(THREAD_PROPERTY, currentThread.getName())));
 
-				debug("Loaded session %s with query %s in %s ms (lastModified %s)", id, sessionQuery,
-						System.currentTimeMillis() - start, new Date(session.getLastAccessedTime()));
+				debug("Loaded session %s with query %s in %s ms (lastModified %s), owned by thread [%s]", id,
+						sessionQuery, System.currentTimeMillis() - start, new Date(session.getLastAccessedTime()),
+						currentThread.getName());
 			} catch (ReflectiveOperationException e1) {
 				throw new ClassNotFoundException("error loading session " + id, e1);
 			} finally {
@@ -407,9 +411,10 @@ public class MongoStore extends StoreBase {
 			sessionQuery.put(idProperty, session.getId());
 
 			/* update the object in the collection, inserting if necessary */
-			this.collection.update(sessionQuery, mongoSession, true, false);
-			debug("Saved session %s with query %s in %s ms (lastModified %s)", session.getId(), sessionQuery,
-					System.currentTimeMillis() - start, mongoSession.getDate(lastModifiedProperty));
+			WriteResult updated = this.collection.update(sessionQuery, mongoSession, true, false);
+			debug("Saved session %s with query %s in %s ms (lastModified %s) acknowledged: %s", session.getId(),
+					sessionQuery, System.currentTimeMillis() - start, mongoSession.getDate(lastModifiedProperty),
+					updated.wasAcknowledged());
 		} catch (MongoException e) {
 			/* for some reason we couldn't save the data */
 			getLog().error("Unable to save session to MongoDB", e);
@@ -488,13 +493,12 @@ public class MongoStore extends StoreBase {
 				this.mongoClient = new MongoClient(this.connectionUri);
 			} else {
 				/* create the client using the Mongo options */
-				ReadPreference readPreference = ReadPreference.primaryPreferred();
 				if (this.useSlaves) {
 					readPreference = ReadPreference.secondaryPreferred();
 				}
 				MongoClientOptions options = MongoClientOptions.builder().connectTimeout(connectionTimeoutMs)
 						.maxWaitTime(connectionWaitTimeoutMs).connectionsPerHost(maxPoolSize).writeConcern(writeConcern)
-						.readPreference(readPreference).build();
+						.readPreference(readPreference).readConcern(readConcern).build();
 
 				/* build up the host list */
 				List<ServerAddress> hosts = new ArrayList<ServerAddress>();
@@ -568,140 +572,80 @@ public class MongoStore extends StoreBase {
 		return log;
 	}
 
-	public String getConnectionUri() {
-		return connectionUri;
-	}
-
 	public void setConnectionUri(String connectionUri) {
 		this.connectionUri = connectionUri;
-	}
-
-	public String getHosts() {
-		return hosts;
 	}
 
 	public void setHosts(String hosts) {
 		this.hosts = hosts;
 	}
 
-	public String getDbName() {
-		return dbName;
-	}
-
 	public void setDbName(String dbName) {
 		this.dbName = dbName;
-	}
-
-	public String getCollectionName() {
-		return collectionName;
 	}
 
 	public void setCollectionName(String collectionName) {
 		this.collectionName = collectionName;
 	}
 
-	public String getUsername() {
-		return username;
-	}
-
 	public void setUsername(String username) {
 		this.username = username;
-	}
-
-	public String getPassword() {
-		return password;
 	}
 
 	public void setPassword(String password) {
 		this.password = password;
 	}
 
-	public int getConnectionTimeoutMs() {
-		return connectionTimeoutMs;
-	}
-
 	public void setConnectionTimeoutMs(int connectionTimeoutMs) {
 		this.connectionTimeoutMs = connectionTimeoutMs;
-	}
-
-	public int getConnectionWaitTimeoutMs() {
-		return connectionWaitTimeoutMs;
 	}
 
 	public void setConnectionWaitTimeoutMs(int connectionWaitTimeoutMs) {
 		this.connectionWaitTimeoutMs = connectionWaitTimeoutMs;
 	}
 
-	public int getMinPoolSize() {
-		return minPoolSize;
-	}
-
 	public void setMinPoolSize(int minPoolSize) {
 		this.minPoolSize = minPoolSize;
-	}
-
-	public int getMaxPoolSize() {
-		return maxPoolSize;
 	}
 
 	public void setMaxPoolSize(int maxPoolSize) {
 		this.maxPoolSize = maxPoolSize;
 	}
 
-	public String getReplicaSet() {
-		return replicaSet;
-	}
-
 	public void setReplicaSet(String replicaSet) {
 		this.replicaSet = replicaSet;
-	}
-
-	public boolean isUseSecureConnection() {
-		return useSecureConnection;
 	}
 
 	public void setUseSecureConnection(boolean useSecureConnection) {
 		this.useSecureConnection = useSecureConnection;
 	}
 
-	public boolean isUseSlaves() {
-		return useSlaves;
-	}
-
 	public void setUseSlaves(boolean useSlaves) {
 		this.useSlaves = useSlaves;
 	}
 
-	public WriteConcern getWriteConcern() {
-		return writeConcern;
-	}
-
-	public void setWriteConcern(WriteConcern writeConcern) {
-		this.writeConcern = writeConcern;
-	}
-
-	public int getTimeToLive() {
-		return timeToLive;
+	public void setWriteConcern(String writeConcern) {
+		this.writeConcern = WriteConcern.valueOf(writeConcern);
 	}
 
 	public void setTimeToLive(int timeToLive) {
 		this.timeToLive = timeToLive;
 	}
 
-	public long getMaxWaitTime() {
-		return maxWaitTime;
-	}
-
 	public void setMaxWaitTime(long maxWaitTime) {
 		this.maxWaitTime = maxWaitTime;
 	}
 
-	public long getWaitTime() {
-		return waitTime;
-	}
-
 	public void setWaitTime(long waitTime) {
 		this.waitTime = waitTime;
+	}
+
+	public void setReadPreference(String readPreference) {
+		this.readPreference = ReadPreference.valueOf(readPreference);
+	}
+
+	public void setReadConcern(String readConcern) {
+		this.readConcern = new ReadConcern(ReadConcernLevel.valueOf(readConcern));
 	}
 
 }
