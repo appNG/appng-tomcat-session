@@ -19,6 +19,8 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.lang.reflect.Constructor;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 import javax.servlet.ServletContext;
@@ -75,9 +77,7 @@ public class Utils {
 	public static ObjectInputStream getObjectInputStream(ClassLoader classLoader, ServletContext ctx,
 			InputStream data) {
 		ObjectInputStream ois = null;
-		ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
 		try {
-			Thread.currentThread().setContextClassLoader(classLoader);
 			@SuppressWarnings("unchecked")
 			Constructor<ObjectInputStream> constructor = (Constructor<ObjectInputStream>) classLoader
 					.loadClass(Constants.INPUT_STREAM_CLASS)
@@ -86,8 +86,6 @@ public class Utils {
 			ois = constructor.newInstance(data, ctx);
 		} catch (ReflectiveOperationException e) {
 			throw new IllegalArgumentException(e);
-		} finally {
-			Thread.currentThread().setContextClassLoader(contextClassLoader);
 		}
 		return ois;
 	}
@@ -99,10 +97,20 @@ public class Utils {
 			private <T> T callRealMethod(String name, Object... args) {
 				try {
 					Class<?>[] types = new Class<?>[args.length];
-					for (int i = 0; i < types.length; i++) {
-						types[i] = args[i].getClass();
+					List<Object> argsList = Arrays.asList(args);
+					if (types.length > 0) {
+						types[0] = String.class;
+						if (null == args[0]) {
+							argsList.set(0, "");
+						} else if (!String.class.isAssignableFrom(args[0].getClass())) {
+							argsList.set(0, args[0].toString());
+						}
+						for (int i = 1; i < types.length; i++) {
+							types[i] = Throwable.class.isAssignableFrom(args[i].getClass()) ? Throwable.class
+									: Object.class;
+						}
 					}
-					return (T) slf4jLogger.getClass().getMethod(name, types).invoke(slf4jLogger, args);
+					return (T) slf4jLogger.getClass().getMethod(name, types).invoke(slf4jLogger, argsList.toArray());
 				} catch (Exception e) {
 					LogFactory.getLog(clazz).error("error while using slf4j", e);
 				}

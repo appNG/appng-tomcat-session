@@ -31,6 +31,8 @@ import org.springframework.mock.web.MockServletContext;
 
 public class UtilsTest {
 
+	Log log = Utils.getLog(UtilsTest.class);
+
 	@Test
 	public void test() throws Exception {
 		MockServletContext ctx = new MockServletContext();
@@ -59,10 +61,37 @@ public class UtilsTest {
 		Assert.assertEquals("bar", ((Property) newSession.getAttribute("property")).getString());
 
 	}
+
+	@Test
+	public void testLogString() {
+		log.info("testLogString");
+	}
+
+	@Test
+	public void testLogObject() {
+		log.info(new Object());
+	}
+
+	@Test
+	public void testLogStringWithException() {
+		log.info("testLogStringWithException", new IllegalArgumentException("BOOOM!"));
+	}
+
+	@Test
+	public void testLogObjectWithException() {
+		log.info(new Object(), new IllegalArgumentException("BOOOM!"));
+	}
+
+	@Test
+	public void testLogNullWithException() {
+		log.info(null, new IllegalArgumentException("BOOOM!"));
+	}
 	
 	@Test
-	public void testLog(){
-		Log log = Utils.getLog(UtilsTest.class);
-		log.info("testLog()");
+	public void testIsLevelEnabled(){
+		Assert.assertTrue(log.isInfoEnabled());
+		Assert.assertTrue(log.isWarnEnabled());
+		Assert.assertTrue(log.isErrorEnabled());
 	}
+
 }
