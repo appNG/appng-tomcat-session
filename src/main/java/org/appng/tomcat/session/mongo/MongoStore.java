@@ -243,25 +243,28 @@ public class MongoStore extends StoreBase {
 			debug("Session expiration is done by a TTL index");
 		} else {
 			int sessionTimeout = this.manager.getContext().getSessionTimeout();
-			long timeoutMillis = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(sessionTimeout);
-			BasicDBObject expireQuery = new BasicDBObject(lastModifiedProperty,
-					new BasicDBObject("$lte", new Date(timeoutMillis)));
+			Date olderThan = new Date(System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(sessionTimeout));
+			BasicDBObject expireQuery = new BasicDBObject(lastModifiedProperty, new BasicDBObject("$lte", olderThan));
 			DBCursor toExpire = this.collection.find(expireQuery);
-			debug("Found %s sessions to expire with query: %s", toExpire.size(), expireQuery);
+			debug("Found %s sessions to expire with query: %s (older than %s)", toExpire.size(), expireQuery,
+					olderThan);
 			while (toExpire.hasNext()) {
-				DBObject mongdoSession = toExpire.next();
-				String id = (String) mongdoSession.get(idProperty);
-				Long creationTime = (Long) mongdoSession.get(creationTimeProperty);
-				Date lastModified = (Date) mongdoSession.get(lastModifiedProperty);
+				DBObject mongoSession = toExpire.next();
+				String id = (String) mongoSession.get(idProperty);
+				Long creationTime = (Long) mongoSession.get(creationTimeProperty);
+				Date lastModified = (Date) mongoSession.get(lastModifiedProperty);
 				long ageMinutes = TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - lastModified.getTime());
 				debug("Expiring session %s created at %s, last accessed at %s (age: %smin)", id, new Date(creationTime),
 						lastModified, ageMinutes);
 				Session session = manager.createEmptySession();
 				session.setId(id, false);
 				session.setManager(manager);
+				session.setCreationTime(creationTime);
 				session.setValid(true);
+				session.endAccess();
+				// notify session listeners
 				session.expire();
-				this.collection.remove(mongdoSession);
+				this.collection.remove(mongoSession);
 			}
 		}
 	}
