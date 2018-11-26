@@ -274,26 +274,19 @@ public class MongoStore extends StoreBase {
 	 */
 	public StandardSession load(String id) throws ClassNotFoundException, IOException {
 		long start = System.currentTimeMillis();
-		StandardSession session = null;
-
-		Container container = manager.getContext();
-		Context context = (Context) container;
-
-		ClassLoader appContextLoader = context.getLoader().getClassLoader();
 
 		BasicDBObject sessionQuery = new BasicDBObject();
 		sessionQuery.put(idProperty, id);
 		sessionQuery.put(appContextProperty, this.getName());
 
 		DBObject mongoSession = this.collection.findOne(sessionQuery);
+		if (null == mongoSession) {
+			return null;
+		}
 
 		long waited = 0;
-		while (waited < maxWaitTime && (null == mongoSession || (mongoSession.containsField(THREAD_PROPERTY)))) {
-			if (null == mongoSession) {
-				debug("Session %s has not (yet) been found.", id);
-			} else {
-				debug("Session %s is still used by Thread %s", id, mongoSession.get(THREAD_PROPERTY));
-			}
+		while (waited < maxWaitTime && mongoSession.containsField(THREAD_PROPERTY)) {
+			debug("Session %s is still used by Thread %s", id, mongoSession.get(THREAD_PROPERTY));
 			try {
 				Thread.sleep(waitTime);
 				waited += waitTime;
@@ -302,12 +295,14 @@ public class MongoStore extends StoreBase {
 			}
 			mongoSession = this.collection.findOne(sessionQuery);
 		}
-		if (null == mongoSession) {
-			throw new IOException(String.format("Failed to load session %s", id));
-		}
+
+		StandardSession session = null;
+
+		Container container = manager.getContext();
+		Context context = (Context) container;
+		ClassLoader appContextLoader = context.getLoader().getClassLoader();
 
 		byte[] data = (byte[]) mongoSession.get(sessionDataProperty);
-
 		if (data != null) {
 			try (ObjectInputStream ois = Utils.getObjectInputStream(appContextLoader,
 					manager.getContext().getServletContext(), data)) {
