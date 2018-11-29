@@ -55,19 +55,23 @@ public class Utils {
 	}
 
 	public static boolean isTemplateRequest(Request request) {
-		return request.getServletPath().startsWith(getTemplatePrefix(request.getServletContext()));
+		String templatePrefix = getTemplatePrefix(request.getServletContext());
+		return null != templatePrefix && request.getServletPath().startsWith(templatePrefix);
 	}
 
 	public static String getTemplatePrefix(ServletContext servletContext) {
 		try {
 			@SuppressWarnings("unchecked")
-			Object platformConfig = ((Map<String, Object>) servletContext.getAttribute("PLATFORM"))
-					.get("platformConfig");
-			return (String) platformConfig.getClass().getMethod("getString", String.class).invoke(platformConfig,
-					"templatePrefix");
+			Map<String, Object> platformProperties = (Map<String, Object>) servletContext.getAttribute("PLATFORM");
+			if (null != platformProperties) {
+				Object platformConfig = platformProperties.get("platformConfig");
+				return (String) platformConfig.getClass().getMethod("getString", String.class).invoke(platformConfig,
+						"templatePrefix");
+			}
 		} catch (ReflectiveOperationException e) {
 			throw new IllegalArgumentException(e);
 		}
+		return null;
 	}
 
 	public static ObjectInputStream getObjectInputStream(ClassLoader classLoader, ServletContext ctx, byte[] data) {
