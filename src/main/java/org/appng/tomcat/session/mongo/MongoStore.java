@@ -252,10 +252,6 @@ public class MongoStore extends StoreBase {
 				DBObject mongoSession = toExpire.next();
 				String id = (String) mongoSession.get(idProperty);
 				Long creationTime = (Long) mongoSession.get(creationTimeProperty);
-				Date lastModified = (Date) mongoSession.get(lastModifiedProperty);
-				long ageMinutes = TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - lastModified.getTime());
-				debug("Expiring session %s created at %s, last accessed at %s (age: %smin)", id, new Date(creationTime),
-						lastModified, ageMinutes);
 				Session session = manager.createEmptySession();
 				session.setId(id, false);
 				session.setManager(manager);
@@ -264,7 +260,6 @@ public class MongoStore extends StoreBase {
 				session.endAccess();
 				// notify session listeners
 				session.expire();
-				this.collection.remove(mongoSession);
 			}
 		}
 	}
