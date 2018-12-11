@@ -50,15 +50,15 @@ public class MongoSessionTrackerValve extends PersistentValve {
 	}
 
 	private void storeSession(Request request, Response response) throws IOException {
-		Session sessionInternal = request.getSessionInternal();
-		if (sessionInternal != null) {
+		Session session = request.getSessionInternal(false);
+		if (session != null) {
 			MongoPersistentManager manager = (MongoPersistentManager) request.getContext().getManager();
-			if (sessionInternal.isValid()) {
-				log.debug(String.format("Request with session completed, saving session %s", sessionInternal.getId()));
-				manager.getStore().save(sessionInternal);
+			if (session.isValid()) {
+				log.debug(String.format("Request with session completed, saving session %s", session.getId()));
+				manager.getStore().save(session);
 			} else {
-				log.debug(String.format("HTTP Session has been invalidated, removing %s", sessionInternal.getId()));
-				manager.remove(sessionInternal);
+				log.debug(String.format("HTTP Session has been invalidated, removing %s", session.getId()));
+				manager.remove(session);
 			}
 		}
 	}

@@ -16,6 +16,7 @@
 package org.appng.tomcat.session;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.lang.reflect.Constructor;
@@ -74,24 +75,24 @@ public class Utils {
 		return null;
 	}
 
-	public static ObjectInputStream getObjectInputStream(ClassLoader classLoader, ServletContext ctx, byte[] data) {
+	public static ObjectInputStream getObjectInputStream(ClassLoader classLoader, ServletContext ctx, byte[] data)
+			throws IOException {
 		return getObjectInputStream(classLoader, ctx, new ByteArrayInputStream(data));
 	}
 
-	public static ObjectInputStream getObjectInputStream(ClassLoader classLoader, ServletContext ctx,
-			InputStream data) {
-		ObjectInputStream ois = null;
+	public static ObjectInputStream getObjectInputStream(ClassLoader classLoader, ServletContext ctx, InputStream data)
+			throws IOException {
 		try {
 			@SuppressWarnings("unchecked")
 			Constructor<ObjectInputStream> constructor = (Constructor<ObjectInputStream>) classLoader
 					.loadClass(Constants.INPUT_STREAM_CLASS)
 					.getDeclaredConstructor(InputStream.class, ServletContext.class);
 
-			ois = constructor.newInstance(data, ctx);
+			return constructor.newInstance(data, ctx);
 		} catch (ReflectiveOperationException e) {
-			throw new IllegalArgumentException(e);
+			// ignore, webapp is not appNG
 		}
-		return ois;
+		return new ObjectInputStream(data);
 	}
 
 	private static Log getSlf4jWrapper(Class<?> clazz, Object slf4jLogger) {
