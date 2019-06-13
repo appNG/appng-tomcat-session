@@ -194,13 +194,13 @@
 		<dependency>
 			<groupId>org.apache.tomcat</groupId>
 			<artifactId>tomcat-catalina</artifactId>
-			<version>8.5.35</version>
+			<version>8.5.41</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.mongodb</groupId>
 			<artifactId>mongo-java-driver</artifactId>
-			<version>3.5.0</version>
+			<version>3.10.2</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
@@ -224,8 +224,13 @@
 		<dependency>
 			<groupId>org.appng</groupId>
 			<artifactId>appng-api</artifactId>
-			<version>1.14.4</version>
+			<version>1.18.0</version>
 			<scope>provided</scope>
+		</dependency>		
+		<dependency>
+			<groupId>com.hazelcast</groupId>
+			<artifactId>hazelcast-client</artifactId>
+			<version>3.12</version>
 		</dependency>
 	</dependencies>
 </project>
