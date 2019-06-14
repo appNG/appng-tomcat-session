@@ -1,14 +1,29 @@
+/*
+ * Copyright 2015-2019 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.appng.tomcat.session.hazelcast;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.util.Map;
 
 import org.apache.catalina.Session;
 import org.apache.catalina.session.StandardSession;
 import org.apache.catalina.session.StoreBase;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.juli.logging.Log;
 import org.appng.tomcat.session.Utils;
 
@@ -20,7 +35,6 @@ import com.hazelcast.config.MulticastConfig;
 import com.hazelcast.config.NetworkConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.core.ReplicatedMap;
 
 public class HazelcastStore extends StoreBase {
 
@@ -36,7 +50,7 @@ public class HazelcastStore extends StoreBase {
 	private String multicastGroup = MulticastConfig.DEFAULT_MULTICAST_GROUP;
 	private int multicastPort = MulticastConfig.DEFAULT_MULTICAST_PORT;
 	private int multicastTimeoutSeconds = MulticastConfig.DEFAULT_MULTICAST_TIMEOUT_SECONDS;
-	private int multicastTtl = MulticastConfig.DEFAULT_MULTICAST_TTL;
+	private int multicastTimeToLive = MulticastConfig.DEFAULT_MULTICAST_TTL;
 
 	private String tcpMembers = "localhost:5701";
 
@@ -61,6 +75,7 @@ public class HazelcastStore extends StoreBase {
 			joinConfig.getTcpIpConfig().setEnabled(true);
 			joinConfig.getMulticastConfig().setEnabled(false);
 			joinConfig.getTcpIpConfig().addMember(tcpMembers);
+			instance = Hazelcast.newHazelcastInstance(config);
 			break;
 
 		default:
@@ -69,28 +84,18 @@ public class HazelcastStore extends StoreBase {
 			joinConfig.getMulticastConfig().setMulticastGroup(multicastGroup);
 			joinConfig.getMulticastConfig().setMulticastPort(multicastPort);
 			joinConfig.getMulticastConfig().setMulticastTimeoutSeconds(multicastTimeoutSeconds);
-			joinConfig.getMulticastConfig().setMulticastTimeToLive(multicastTtl);
+			joinConfig.getMulticastConfig().setMulticastTimeToLive(multicastTimeToLive);
+			instance = Hazelcast.newHazelcastInstance(config);
 			break;
 		}
-		instance = Hazelcast.newHazelcastInstance(config);
 	}
 
 	public void save(Session session) throws IOException {
 		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
-
 			((StandardSession) session).writeObjectData(oos);
-
-			byte[] data = bos.toByteArray();
-
-			HazelcastSession hzSession = new HazelcastSession();
-			hzSession.setId(session.getIdInternal());
-			hzSession.setApplication(getManager().getName());
-			hzSession.setCreated(session.getCreationTime());
-			hzSession.setData(data);
-			hzSession.setLastModified(session.getLastAccessedTimeInternal());
-			getMap().put(getManager().getName() + "_" + session.getId(), hzSession);
-			log.info("saved: " + session.getId() + " (" + session + ")");
+			getSessions().put(session.getId(), bos.toByteArray());
+			log.info("saved: " + session.getId());
 		}
 	}
 
@@ -99,47 +104,42 @@ public class HazelcastStore extends StoreBase {
 		return (HazelcastPersistentManager) super.getManager();
 	}
 
-	public Session load(String id) throws ClassNotFoundException, IOException {
-		HazelcastSession hzSession = getMap().get(getManager().getName() + "_" + id);
-		if (null == hzSession) {
+	public StandardSession load(String id) throws ClassNotFoundException, IOException {
+		byte[] data = getSessions().get(id);
+		if (null == data) {
 			return null;
 		}
-		StandardSession session = null;
 
-		byte[] data = (byte[]) hzSession.getData();
-		if (data != null) {
-			ClassLoader appContextLoader = getManager().getContext().getLoader().getClassLoader();
-			try (ObjectInputStream ois = Utils.getObjectInputStream(appContextLoader,
-					manager.getContext().getServletContext(), data)) {
+		ClassLoader appContextLoader = getManager().getContext().getLoader().getClassLoader();
+		try (ObjectInputStream ois = Utils.getObjectInputStream(appContextLoader,
+				manager.getContext().getServletContext(), data)) {
 
-				session = (StandardSession) this.manager.createEmptySession();
-				session.readObjectData(ois);
-
-			}
-			log.info("loaded" + id + " (" + session + ")");
+			StandardSession session = (StandardSession) this.manager.createEmptySession();
+			session.readObjectData(ois);
+			log.info("loaded: " + id);
+			return session;
 		}
-		return session;
 	}
 
 	public void remove(String id) throws IOException {
-		HazelcastSession removed = getMap().remove(id);
-		log.info("removed" + id + " (" + removed + ")");
+		getSessions().remove(id);
+		log.info("removed" + id);
 	}
 
 	public String[] keys() throws IOException {
-		return getMap().keySet().toArray(new String[0]);
+		return getSessions().keySet().toArray(new String[0]);
 	}
 
 	public int getSize() throws IOException {
-		return getMap().size();
+		return getSessions().size();
 	}
 
 	public void clear() throws IOException {
-		getMap().clear();
+		getSessions().clear();
 	}
 
-	private ReplicatedMap<String, HazelcastSession> getMap() {
-		return instance.getReplicatedMap(mapName);
+	private Map<String, byte[]> getSessions() {
+		return instance.getReplicatedMap(getManager().getName() + mapName);
 	}
 
 	// getters and setters
@@ -175,8 +175,8 @@ public class HazelcastStore extends StoreBase {
 		this.multicastTimeoutSeconds = multicastTimeoutSeconds;
 	}
 
-	public void setMulticastTtl(int multicastTtl) {
-		this.multicastTtl = multicastTtl;
+	public void setMulticastTimeToLive(int multicastTimeToLive) {
+		this.multicastTimeToLive = multicastTimeToLive;
 	}
 
 	public void setTcpMembers(String tcpMembers) {

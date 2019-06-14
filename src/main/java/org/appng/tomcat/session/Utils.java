@@ -26,6 +26,8 @@ import java.util.Map;
 
 import javax.servlet.ServletContext;
 
+import org.apache.catalina.Container;
+import org.apache.catalina.Context;
 import org.apache.catalina.connector.Request;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
@@ -195,6 +197,23 @@ public class Utils {
 			}
 
 		};
+	}
+
+	public static String getContextName(Context context) {
+		String contextName = context.getName();
+		if (!contextName.startsWith("/")) {
+			contextName = "/" + contextName;
+		}
+		String hostName = "";
+		String engineName = "";
+		if (context.getParent() != null) {
+			Container host = context.getParent();
+			hostName = host.getName();
+			if (host.getParent() != null) {
+				engineName = host.getParent().getName();
+			}
+		}
+		return "/" + engineName + "/" + hostName + contextName;
 	}
 
 }
