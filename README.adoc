@@ -93,17 +93,16 @@ Add the following into your Tomcat `context.xml` (or the context block of the `s
 ----
 <Valve className="org.appng.tomcat.session.hazelcast.HazelcastSessionTrackerValve" />
 <Manager className="org.appng.tomcat.session.hazelcast.HazelcastPersistentManager">	
-	
-	<!-- standard configuration, using mulicast -->
-	<Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="multicast" port="5701"
+
+	<!-- standard configuration, using multicast -->
+	<Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="multicast" port="5701" instanceName="appNG" group="dev"
 		multicastGroup="224.2.2.3" multicastPort="54327" multicastTimeoutSeconds="2" multicastTimeToLive="32"/>
-		
+
 	<!-- uses tcp, allowing to use a comma separated list of addresses -->	
-	<!--Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="tcp" port="5701"
-		addresses="localhost:5701" /-->
-		
+	<!--Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="tcp" port="5701" instanceName="appNG" group="dev" --/>
+
 	<!-- client mode, allowing to use a comma separated list of addresses -->
-	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="client"
+	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="client" instanceName="appNG" group="dev"
 		addresses="localhost:5701" /-->
 </Manager>
 ----

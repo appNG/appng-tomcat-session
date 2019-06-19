@@ -22,6 +22,7 @@ import java.io.ObjectOutputStream;
 import java.util.Map;
 
 import org.apache.catalina.Session;
+import org.apache.catalina.Store;
 import org.apache.catalina.session.StandardSession;
 import org.apache.catalina.session.StoreBase;
 import org.apache.juli.logging.Log;
@@ -35,7 +36,52 @@ import com.hazelcast.config.MulticastConfig;
 import com.hazelcast.config.NetworkConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.core.ReplicatedMap;
 
+/**
+ * A {@link Store} using Hazelcast's {@link ReplicatedMap} to store sessions.
+ * <p/>
+ * Configuration parameters (defaults in brackets):
+ * <ul>
+ * <li>mapName (tomcat.sessions)<br/>
+ * The name of the map used to store the sessions.</li>
+ * 
+ * <li>mode (multicast)<br/>
+ * The mode to use, one of multicast, tcp, client.</li>
+ * 
+ * <li>group (dev)<br/>
+ * The Hazelcast group to use.</li>
+ * 
+ * <li>addresses (localhost:5701)<br/>
+ * A comma separated list of server addresses to use, only applies to 'client'
+ * mode.</li>
+ * 
+ * <li>port (5701)<br/>
+ * The Hazelcast port to use.</li>
+ * 
+ * <li>multicastGroup (224.2.2.3)<br/>
+ * The multicast group, only applies to 'multicast' mode.</li>
+ * 
+ * <li>multicastPort (54327)<br/>
+ * The multicast port, only applies to 'multicast' mode.</li>
+ * 
+ * <li>multicastTimeoutSeconds (2)<br/>
+ * The multicast timeout, only applies to 'multicast' mode.</li>
+ * 
+ * <li>multicastTimeToLive (32)<br/>
+ * The multicast ttl, only applies to 'multicast' mode.</li>
+ * 
+ * <li>tcpMembers (<i>null</i>)<br/>
+ * A comma separated list of members to connect to, only applies to 'tcp'
+ * mode.</li>
+ * 
+ * <li>instanceName (appNG)<br/>
+ * The Hazelcast instance name.</li>
+ * </ul>
+ * 
+ * @author Matthias Müller
+ *
+ */
 public class HazelcastStore extends StoreBase {
 
 	private final Log log = Utils.getLog(HazelcastStore.class);
@@ -52,18 +98,21 @@ public class HazelcastStore extends StoreBase {
 	private int multicastTimeoutSeconds = MulticastConfig.DEFAULT_MULTICAST_TIMEOUT_SECONDS;
 	private int multicastTimeToLive = MulticastConfig.DEFAULT_MULTICAST_TTL;
 
-	private String tcpMembers = "localhost:5701";
+	private String tcpMembers;
+	private String instanceName = "appNG";
 
 	@Override
 	protected void initInternal() {
 		super.initInternal();
 		Config config = new Config();
+		config.setInstanceName(instanceName);
 		config.getNetworkConfig().setPort(port);
 		JoinConfig joinConfig = config.getNetworkConfig().getJoin();
 		switch (mode) {
 		case "client":
 			ClientConfig clientConfig = new ClientConfig();
 			clientConfig.getGroupConfig().setName(group);
+			clientConfig.setInstanceName(instanceName);
 			String[] addressArr = addresses.split(",");
 			for (String address : addressArr) {
 				clientConfig.getNetworkConfig().addAddress(address.trim());
@@ -74,8 +123,10 @@ public class HazelcastStore extends StoreBase {
 		case "tcp":
 			joinConfig.getTcpIpConfig().setEnabled(true);
 			joinConfig.getMulticastConfig().setEnabled(false);
-			joinConfig.getTcpIpConfig().addMember(tcpMembers);
-			instance = Hazelcast.newHazelcastInstance(config);
+			if (null != tcpMembers) {
+				joinConfig.getTcpIpConfig().addMember(tcpMembers);
+			}
+			instance = Hazelcast.getOrCreateHazelcastInstance(config);
 			break;
 
 		default:
@@ -85,9 +136,10 @@ public class HazelcastStore extends StoreBase {
 			joinConfig.getMulticastConfig().setMulticastPort(multicastPort);
 			joinConfig.getMulticastConfig().setMulticastTimeoutSeconds(multicastTimeoutSeconds);
 			joinConfig.getMulticastConfig().setMulticastTimeToLive(multicastTimeToLive);
-			instance = Hazelcast.newHazelcastInstance(config);
+			instance = Hazelcast.getOrCreateHazelcastInstance(config);
 			break;
 		}
+		log.info(String.format("Using instance %s", instance));
 	}
 
 	public void save(Session session) throws IOException {
@@ -95,7 +147,7 @@ public class HazelcastStore extends StoreBase {
 				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
 			((StandardSession) session).writeObjectData(oos);
 			getSessions().put(session.getId(), bos.toByteArray());
-			log.info("saved: " + session.getId());
+			log.debug("saved: " + session.getId());
 		}
 	}
 
@@ -113,17 +165,16 @@ public class HazelcastStore extends StoreBase {
 		ClassLoader appContextLoader = getManager().getContext().getLoader().getClassLoader();
 		try (ObjectInputStream ois = Utils.getObjectInputStream(appContextLoader,
 				manager.getContext().getServletContext(), data)) {
-
 			StandardSession session = (StandardSession) this.manager.createEmptySession();
 			session.readObjectData(ois);
-			log.info("loaded: " + id);
+			log.debug("loaded: " + id);
 			return session;
 		}
 	}
 
 	public void remove(String id) throws IOException {
 		getSessions().remove(id);
-		log.info("removed" + id);
+		log.debug("removed" + id);
 	}
 
 	public String[] keys() throws IOException {
@@ -181,6 +232,10 @@ public class HazelcastStore extends StoreBase {
 
 	public void setTcpMembers(String tcpMembers) {
 		this.tcpMembers = tcpMembers;
+	}
+
+	public void setInstanceName(String instanceName) {
+		this.instanceName = instanceName;
 	}
 
 }
