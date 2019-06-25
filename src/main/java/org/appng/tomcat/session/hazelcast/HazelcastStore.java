@@ -117,8 +117,12 @@ public class HazelcastStore extends StoreBase {
 			for (String address : addressArr) {
 				clientConfig.getNetworkConfig().addAddress(address.trim());
 			}
-			instance = HazelcastClient.newHazelcastClient(clientConfig);
-			break;
+			instance = HazelcastClient.getHazelcastClientByName(instanceName);
+			if (null == instance) {
+				instance = HazelcastClient.newHazelcastClient(clientConfig);
+			}
+			log.info(String.format("Using client, connecting to %s", clientConfig.getNetworkConfig().getAddresses()));
+			return;
 
 		case "tcp":
 			joinConfig.getTcpIpConfig().setEnabled(true);
@@ -140,6 +144,12 @@ public class HazelcastStore extends StoreBase {
 			break;
 		}
 		log.info(String.format("Using instance %s", instance));
+	}
+	
+	@Override
+	protected void destroyInternal() {
+		log.info(String.format("Shutting down instance %s", instance));
+		instance.shutdown();
 	}
 
 	public void save(Session session) throws IOException {

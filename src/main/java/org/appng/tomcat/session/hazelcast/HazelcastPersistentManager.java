@@ -28,6 +28,12 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 
 	protected void destroyInternal() throws LifecycleException {
 		super.destroyInternal();
+		getStore().destroy();
+	}
+
+	@Override
+	public HazelcastStore getStore() {
+		return (HazelcastStore) super.getStore();
 	}
 
 	@Override
