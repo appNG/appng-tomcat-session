@@ -39,9 +39,7 @@ public class MongoSessionTrackerValve extends PersistentValve {
 			getNext().invoke(request, response);
 		} finally {
 			long start = System.currentTimeMillis();
-			if (!Utils.isTemplateRequest(request)) {
-				storeSession(request, response);
-			}
+			storeSession(request, response);
 			long duration = System.currentTimeMillis() - start;
 			if (log.isDebugEnabled() && duration > 0) {
 				log.debug(String.format("handling session for %s took %sms", request.getServletPath(), duration));

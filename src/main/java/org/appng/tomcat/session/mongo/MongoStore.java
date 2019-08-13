@@ -60,7 +60,7 @@ public class MongoStore extends StoreBase {
 	private final Log log = Utils.getLog(MongoStore.class);
 
 	/** Property used to store the Session's ID */
-	private static final String idProperty = "_id";
+	private static final String idProperty = "session_id";
 
 	/** Property used to store the Session's context name */
 	protected static final String appContextProperty = "app";
@@ -174,7 +174,7 @@ public class MongoStore extends StoreBase {
 	/** The {@link ReadPreference}, using {@link ReadPreference#primary()} for maximum consistency by default */
 	protected ReadPreference readPreference = ReadPreference.primary();
 
-	/** The {@link ReadConcern}, using {@link ReadConcern#MAJORITY} for maximum consistency by default */
+	/** The {@link ReadConcern}, using {@link ReadConcern#DEFAULT} for maximum consistency by default */
 	protected ReadConcern readConcern = ReadConcern.DEFAULT;
 
 	/** Should a TTL index be used to expire sessions ? */
@@ -461,26 +461,24 @@ public class MongoStore extends StoreBase {
 				}
 				MongoClientOptions options = MongoClientOptions.builder().connectTimeout(connectionTimeoutMs)
 						.maxWaitTime(connectionWaitTimeoutMs).connectionsPerHost(maxPoolSize).writeConcern(writeConcern)
-						.readPreference(readPreference).readConcern(readConcern).build();
+						.readPreference(readPreference).readConcern(readConcern).requiredReplicaSetName(replicaSet).build();
 
 				List<ServerAddress> hosts = new ArrayList<ServerAddress>();
-				String[] dbHosts = this.hosts.split(",");
-				for (String dbHost : dbHosts) {
+				for (String dbHost : this.hosts.split(",")) {
 					String[] hostInfo = dbHost.split(":");
-					ServerAddress address = new ServerAddress(hostInfo[0], Integer.parseInt(hostInfo[1]));
-					hosts.add(address);
+					hosts.add(new ServerAddress(hostInfo[0], Integer.parseInt(hostInfo[1])));
 				}
 
 				info("%s [%s]: Connecting to MongoDB [%s]", getStoreName(), this.getName(), this.hosts);
 
-				List<MongoCredential> credentials = new ArrayList<MongoCredential>();
 				if (this.username != null || this.password != null) {
 					info("%s [%s]: Authenticating using [%s]", getStoreName(), this.getName(), this.username);
-					for (int i = 0; i < hosts.size(); i++) {
-						credentials.add(MongoCredential.createCredential(username, dbName, password.toCharArray()));
-					}
+					MongoCredential credential = MongoCredential.createCredential(username, dbName,
+							password.toCharArray());
+					this.mongoClient = new MongoClient(hosts, credential, options);
+				} else {
+					this.mongoClient = new MongoClient(hosts, options);
 				}
-				this.mongoClient = new MongoClient(hosts, credentials, options);
 			}
 
 			info("%s [%s]: Using Database [%s]", getStoreName(), this.getName(), this.dbName);
