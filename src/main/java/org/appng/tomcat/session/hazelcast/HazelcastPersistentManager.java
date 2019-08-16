@@ -20,10 +20,13 @@ import java.io.IOException;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.Session;
 import org.apache.catalina.session.PersistentManagerBase;
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
 import org.appng.tomcat.session.Utils;
 
 public class HazelcastPersistentManager extends PersistentManagerBase {
 
+	private static final Log log = LogFactory.getLog(HazelcastPersistentManager.class);
 	private String name;
 
 	protected void destroyInternal() throws LifecycleException {
@@ -45,6 +48,18 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 	public void remove(Session session, boolean update) {
 		// avoid super.remove
 		removeSession(session.getId());
+	}
+
+	@Override
+	public Session createSession(String sessionId) {
+		Session session = super.createSession(sessionId);
+		try {
+			getStore().save(session);
+		} catch (IOException e) {
+			log.warn(String.format("Error creating session: %s", session.getIdInternal()));
+			session = null;
+		}
+		return session;
 	}
 
 	@Override

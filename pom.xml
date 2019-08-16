@@ -226,11 +226,11 @@
 			<artifactId>appng-api</artifactId>
 			<version>1.18.0</version>
 			<scope>provided</scope>
-		</dependency>		
+		</dependency>
 		<dependency>
 			<groupId>com.hazelcast</groupId>
 			<artifactId>hazelcast-client</artifactId>
-			<version>3.12</version>
+			<version>3.12.2</version>
 		</dependency>
 	</dependencies>
 </project>

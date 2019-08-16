@@ -28,8 +28,7 @@ import org.apache.juli.logging.Log;
 import org.appng.tomcat.session.Utils;
 
 /**
- * A {@link Valve} that uses {@link HazelcastPersistentManager} to store a
- * {@link Session}
+ * A {@link Valve} that uses {@link HazelcastPersistentManager} to store a {@link Session}
  */
 public class HazelcastSessionTrackerValve extends PersistentValve {
 
@@ -44,16 +43,15 @@ public class HazelcastSessionTrackerValve extends PersistentValve {
 			HazelcastPersistentManager manager = (HazelcastPersistentManager) request.getContext().getManager();
 			Session session = request.getSessionInternal(false);
 			if (session != null) {
-				if (!Utils.isTemplateRequest(request)) {
-					if (session.isValid()) {
-						log.debug(String.format("Request with session completed, saving session %s", session.getId()));
-						manager.getStore().save(session);
-					} else {
-						log.debug(String.format("HTTP Session has been invalidated, removing %s", session.getId()));
-						manager.remove(session);
-					}
+				if (session.isValid()) {
+					log.debug(String.format("Request with session completed, saving session %s", session.getId()));
+					manager.getStore().save(session);
+				} else {
+					log.debug(String.format("HTTP Session has been invalidated, removing %s", session.getId()));
+					manager.remove(session);
 				}
 			}
+
 			long duration = System.currentTimeMillis() - start;
 			if (log.isDebugEnabled() && duration > 0) {
 				log.debug(String.format("handling session for %s took %sms", request.getServletPath(), duration));
