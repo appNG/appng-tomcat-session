@@ -100,11 +100,15 @@ Add the following into your Tomcat `context.xml` (or the context block of the `s
 		multicastGroup="224.2.2.3" multicastPort="54327" multicastTimeoutSeconds="2" multicastTimeToLive="32"/>
 
 	<!-- uses tcp, allowing to use a comma separated list of addresses -->	
-	<!--Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="tcp" port="5701" instanceName="appNG" group="dev" --/>
+	<!--Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="tcp" port="5701" instanceName="appNG" group="dev"
+		tcpMembers="localhost:5701" /-->
 
 	<!-- client mode, allowing to use a comma separated list of addresses -->
 	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="client" instanceName="appNG" group="dev"
 		addresses="localhost:5701" /-->
+	
+	<-- standalone mode, for development purposes -->
+	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="standalone" port="5701" instanceName="appNG" group="dev" /-->
 </Manager>
 ----
 
@@ -112,6 +116,8 @@ Copy the following files into the `TOMCAT_BASE/lib` directory:
 
 * appng-tomcat-session-{version}.jar
 * http://repo1.maven.org/maven2/com/hazelcast/hazelcast/{hazelcast-version}/hazelcast-{hazelcast-version}.jar[hazelcast-{hazelcast-version}.jar]
+
+When using `client`-mode, you also need
 * http://repo1.maven.org/maven2/com/hazelcast/hazelcast-client/{hazelcast-version}/hazelcast-client-{hazelcast-version}.jar[hazelcast-client-{hazelcast-version}.jar]
 
 Reboot the server, and sessions are now stored in Hazelcast.

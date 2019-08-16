@@ -31,6 +31,7 @@ import org.appng.tomcat.session.Utils;
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.config.Config;
+import com.hazelcast.config.GroupConfig;
 import com.hazelcast.config.JoinConfig;
 import com.hazelcast.config.MulticastConfig;
 import com.hazelcast.config.NetworkConfig;
@@ -45,42 +46,29 @@ import com.hazelcast.core.ReplicatedMap;
  * <ul>
  * <li>mapName (tomcat.sessions)<br/>
  * The name of the map used to store the sessions.</li>
- * 
  * <li>mode (multicast)<br/>
- * The mode to use, one of multicast, tcp, client.</li>
- * 
+ * The mode to use, one of multicast, tcp, client, standalone.</li>
  * <li>group (dev)<br/>
  * The Hazelcast group to use.</li>
- * 
  * <li>addresses (localhost:5701)<br/>
- * A comma separated list of server addresses to use, only applies to 'client'
- * mode.</li>
- * 
+ * A comma separated list of server addresses to use, only applies to 'client' mode.</li>
  * <li>port (5701)<br/>
  * The Hazelcast port to use.</li>
- * 
  * <li>multicastGroup (224.2.2.3)<br/>
  * The multicast group, only applies to 'multicast' mode.</li>
- * 
  * <li>multicastPort (54327)<br/>
  * The multicast port, only applies to 'multicast' mode.</li>
- * 
  * <li>multicastTimeoutSeconds (2)<br/>
  * The multicast timeout, only applies to 'multicast' mode.</li>
- * 
  * <li>multicastTimeToLive (32)<br/>
  * The multicast ttl, only applies to 'multicast' mode.</li>
- * 
  * <li>tcpMembers (<i>null</i>)<br/>
- * A comma separated list of members to connect to, only applies to 'tcp'
- * mode.</li>
- * 
+ * A comma separated list of members to connect to, only applies to 'tcp' mode.</li>
  * <li>instanceName (appNG)<br/>
  * The Hazelcast instance name.</li>
  * </ul>
  * 
  * @author Matthias Müller
- *
  */
 public class HazelcastStore extends StoreBase {
 
@@ -88,7 +76,7 @@ public class HazelcastStore extends StoreBase {
 	private HazelcastInstance instance;
 
 	private String mapName = "tomcat.sessions";
-	private String mode = "multicast";
+	private Mode mode = Mode.MULTICAST;
 	private String group = "dev";
 	private String addresses = "localhost:5701";
 	private int port = NetworkConfig.DEFAULT_PORT;
@@ -101,40 +89,50 @@ public class HazelcastStore extends StoreBase {
 	private String tcpMembers;
 	private String instanceName = "appNG";
 
+	public enum Mode {
+		MULTICAST, TCP, CLIENT, STANDALONE;
+	}
+
 	@Override
 	protected void initInternal() {
 		super.initInternal();
 		Config config = new Config();
 		config.setInstanceName(instanceName);
+		GroupConfig groupConfig = new GroupConfig();
+		groupConfig.setName(group);
+		config.setGroupConfig(groupConfig);
 		config.getNetworkConfig().setPort(port);
 		JoinConfig joinConfig = config.getNetworkConfig().getJoin();
+		joinConfig.getTcpIpConfig().setEnabled(false);
+		joinConfig.getMulticastConfig().setEnabled(false);
 		switch (mode) {
-		case "client":
-			ClientConfig clientConfig = new ClientConfig();
-			clientConfig.getGroupConfig().setName(group);
-			clientConfig.setInstanceName(instanceName);
-			String[] addressArr = addresses.split(",");
-			for (String address : addressArr) {
-				clientConfig.getNetworkConfig().addAddress(address.trim());
-			}
+		case CLIENT:
 			instance = HazelcastClient.getHazelcastClientByName(instanceName);
 			if (null == instance) {
+				ClientConfig clientConfig = new ClientConfig();
+				clientConfig.getGroupConfig().setName(group);
+				clientConfig.setInstanceName(instanceName);
+				String[] addressArr = addresses.split(",");
+				for (String address : addressArr) {
+					clientConfig.getNetworkConfig().addAddress(address.trim());
+				}
 				instance = HazelcastClient.newHazelcastClient(clientConfig);
+				log.info(String.format("Using new client %s, connecting to %s", instanceName,
+						clientConfig.getNetworkConfig().getAddresses()));
+			} else {
+				log.info(String.format("Using existing client %s", instanceName));
 			}
-			log.info(String.format("Using client, connecting to %s", clientConfig.getNetworkConfig().getAddresses()));
 			return;
 
-		case "tcp":
+		case TCP:
 			joinConfig.getTcpIpConfig().setEnabled(true);
-			joinConfig.getMulticastConfig().setEnabled(false);
 			if (null != tcpMembers) {
 				joinConfig.getTcpIpConfig().addMember(tcpMembers);
 			}
 			instance = Hazelcast.getOrCreateHazelcastInstance(config);
 			break;
 
-		default:
-			joinConfig.getTcpIpConfig().setEnabled(false);
+		case MULTICAST:
 			joinConfig.getMulticastConfig().setEnabled(true);
 			joinConfig.getMulticastConfig().setMulticastGroup(multicastGroup);
 			joinConfig.getMulticastConfig().setMulticastPort(multicastPort);
@@ -142,10 +140,14 @@ public class HazelcastStore extends StoreBase {
 			joinConfig.getMulticastConfig().setMulticastTimeToLive(multicastTimeToLive);
 			instance = Hazelcast.getOrCreateHazelcastInstance(config);
 			break;
+
+		default:
+			instance = Hazelcast.getOrCreateHazelcastInstance(config);
+			break;
 		}
 		log.info(String.format("Using instance %s", instance));
 	}
-	
+
 	@Override
 	protected void destroyInternal() {
 		log.info(String.format("Shutting down instance %s", instance));
@@ -209,7 +211,9 @@ public class HazelcastStore extends StoreBase {
 	}
 
 	public void setMode(String mode) {
-		this.mode = mode;
+		if (null != mode) {
+			this.mode = Mode.valueOf(mode.trim().toUpperCase());
+		}
 	}
 
 	public void setGroup(String group) {

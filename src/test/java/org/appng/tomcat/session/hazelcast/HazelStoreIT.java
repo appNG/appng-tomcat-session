@@ -21,6 +21,7 @@ import org.apache.catalina.core.StandardHost;
 import org.apache.catalina.core.StandardService;
 import org.apache.catalina.loader.WebappLoader;
 import org.apache.catalina.session.StandardSession;
+import org.appng.tomcat.session.hazelcast.HazelcastStore.Mode;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -43,12 +44,13 @@ public class HazelStoreIT {
 		host.setParent(engine);
 		context.setParent(host);
 		loader.setContext(context);
-		
+
 		HazelcastPersistentManager manager = new HazelcastPersistentManager();
 		manager.setContext(context);
-		
+
 		HazelcastStore store = new HazelcastStore();
-		store.setManager(manager);		
+		store.setMode(Mode.STANDALONE.name());
+		store.setManager(manager);
 		manager.setStore(store);
 		store.start();
 
