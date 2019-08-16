@@ -4,7 +4,7 @@ image::https://www.aiticon.com/assets/images/appng_logo_760px.jpg[]
 :mongo-version: 3.10.2
 :jedis-version: 3.1.0
 :pool2-version: 2.6.2
-:hazelcast-version: 3.12.1
+:hazelcast-version: 3.12.2
 
 == appNG Tomcat Session
 This library contains implementations of http://tomcat.apache.org/[Apache Tomcat^]s 
