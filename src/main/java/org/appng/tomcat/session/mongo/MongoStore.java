@@ -181,6 +181,9 @@ public class MongoStore extends StoreBase {
 	/** Should a TTL index be used to expire sessions ? */
 	private boolean useTTLIndex = false;
 
+	/** The socket timeout when connecting to a MongoDB server */
+	private int socketTimeout = 10000;
+
 	/**
 	 * Retrieve the unique Context name for this Manager. This will be used to separate out sessions from different
 	 * application Contexts.
@@ -489,7 +492,7 @@ public class MongoStore extends StoreBase {
 				MongoClientOptions options = MongoClientOptions.builder().connectTimeout(connectionTimeoutMs)
 						.maxWaitTime(connectionWaitTimeoutMs).connectionsPerHost(maxPoolSize).writeConcern(writeConcern)
 						.readPreference(readPreference).readConcern(readConcern).requiredReplicaSetName(replicaSet)
-						.build();
+						.socketTimeout(socketTimeout).build();
 
 				List<ServerAddress> hosts = new ArrayList<ServerAddress>();
 				for (String dbHost : this.hosts.split(",")) {
