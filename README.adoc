@@ -2,6 +2,8 @@ image::https://www.aiticon.com/assets/images/appng_logo_760px.jpg[]
 
 :version: 0.2.0-SNAPSHOT
 :mongo-version: 3.10.2
+:jedis-version: 3.1.0
+:pool2-version: 2.6.2
 :hazelcast-version: 3.12.1
 
 == appNG Tomcat Session
@@ -27,7 +29,8 @@ log4j.category.org.appng.tomcat.session = trace
 ----
 
 == Using Redis
-The implementation is based on the great work of James Coleman's https://github.com/jcoleman/tomcat-redis-session-manager[tomcat-redis-session-manager^].
+This implementation uses https://redis.io/[Redis^] to store sessions.
+It is based on the great work of James Coleman's https://github.com/jcoleman/tomcat-redis-session-manager[tomcat-redis-session-manager^].
 
 A few changes were made to support Tomcat 8 and the latest version of Redis.
 
@@ -48,16 +51,14 @@ Add the following into your Tomcat `context.xml` (or the context block of the `s
 Copy the following files into the `TOMCAT_BASE/lib` directory:
 
 * appng-tomcat-session-{version}.jar
-* http://repo1.maven.org/maven2/redis/clients/jedis/2.9.0/jedis-2.9.0.jar[jedis-2.9.0.jar^]
-* http://repo1.maven.org/maven2/org/apache/commons/commons-pool2/2.4.2/commons-pool2-2.4.2.jar[commons-pool2-2.4.2.jar^]
+* http://repo1.maven.org/maven2/redis/clients/jedis/{jedis-version}/jedis-{jedis-version}.jar[jedis-{jedis-version}.jar^]
+* http://repo1.maven.org/maven2/org/apache/commons/commons-pool2/{pool2-version}/commons-pool2-{pool2-version}.jar[commons-pool2-{pool2-version}.jar^]
 
 Reboot the server, and sessions should now be stored in Redis.
 
 
 == Using MongoDB
-The implementation is based on the great work of Kevin Davis' https://github.com/HBRGTech/mongo-session-manager[mongo-session-manager^].
-
-A few changes were made to support Tomcat 8 and the latest version of MongoDB.
+This implementation uses https://www.mongodb.com[MongoDB^] to store sessions.
 
 === Configuration
 Add the following into your Tomcat `context.xml` (or the context block of the `server.xml` if applicable.)

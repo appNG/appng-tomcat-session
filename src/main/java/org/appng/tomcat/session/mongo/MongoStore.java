@@ -57,10 +57,12 @@ import com.mongodb.WriteResult;
  */
 public class MongoStore extends StoreBase {
 
+	protected ThreadLocal<Session> currentSession = new ThreadLocal<>();
+
 	private final Log log = Utils.getLog(MongoStore.class);
 
 	/** Property used to store the Session's ID */
-	private static final String idProperty = "_id";
+	private static final String idProperty = "session_id";
 
 	/** Property used to store the Session's context name */
 	protected static final String appContextProperty = "app";
@@ -110,7 +112,6 @@ public class MongoStore extends StoreBase {
 	 * <pre>
 	 * 		127.0.0.1:27001,127.0.0.1:27002
 	 * </pre>
-	 * 
 	 * </p>
 	 */
 	protected String hosts;
@@ -169,12 +170,12 @@ public class MongoStore extends StoreBase {
 	protected long maxWaitTime = 5000;
 
 	/** The time to wait in one iteration when reading a session that is still used by another thread */
-	protected long waitTime = 50;
+	protected long waitTime = 100;
 
 	/** The {@link ReadPreference}, using {@link ReadPreference#primary()} for maximum consistency by default */
 	protected ReadPreference readPreference = ReadPreference.primary();
 
-	/** The {@link ReadConcern}, using {@link ReadConcern#MAJORITY} for maximum consistency by default */
+	/** The {@link ReadConcern}, using {@link ReadConcern#DEFAULT} for maximum consistency by default */
 	protected ReadConcern readConcern = ReadConcern.DEFAULT;
 
 	/** Should a TTL index be used to expire sessions ? */
@@ -268,12 +269,22 @@ public class MongoStore extends StoreBase {
 	 * {@inheritDoc}
 	 */
 	public StandardSession load(String id) throws ClassNotFoundException, IOException {
+
+		StandardSession session = (StandardSession) currentSession.get();
+		if (null != session) {
+			if (session.getIdInternal().equals(id)) {
+				debug("Session from ThreadLocal: %s", id);
+				return session;
+			} else {
+				warn("Session from ThreadLocal differed! Requested: %s, found: %s", id, session.getIdInternal());
+				removeThreadLocalSession();
+				session = null;
+			}
+		}
+
 		long start = System.currentTimeMillis();
 
-		BasicDBObject sessionQuery = new BasicDBObject();
-		sessionQuery.put(idProperty, id);
-		sessionQuery.put(appContextProperty, this.getName());
-
+		BasicDBObject sessionQuery = sessionQuery(id);
 		DBObject mongoSession = this.collection.findOne(sessionQuery);
 		if (null == mongoSession) {
 			return null;
@@ -290,8 +301,12 @@ public class MongoStore extends StoreBase {
 			}
 			mongoSession = this.collection.findOne(sessionQuery);
 		}
-
-		StandardSession session = null;
+		if (waited >= maxWaitTime) {
+			info("waited more than %sms, proceeding!", maxWaitTime);
+		}
+		if (null != mongoSession.get(THREAD_PROPERTY)) {
+			debug("Session %s is still used by Thread %s", id, mongoSession.get(THREAD_PROPERTY));
+		}
 
 		Container container = manager.getContext();
 		Context context = (Context) container;
@@ -306,28 +321,32 @@ public class MongoStore extends StoreBase {
 				session.readObjectData(ois);
 				session.setManager(this.manager);
 
-				this.collection.update(sessionQuery, new BasicDBObject("$set",
-						new BasicDBObject(THREAD_PROPERTY, Thread.currentThread().getName())));
+				String threadName = Thread.currentThread().getName();
+				BasicDBObject setThread = new BasicDBObject("$set", new BasicDBObject(THREAD_PROPERTY, threadName));
+				this.collection.update(sessionQuery, setThread);
 
 				debug("Loaded session %s with query %s in %s ms (lastModified %s), owned by thread [%s]", id,
 						sessionQuery, System.currentTimeMillis() - start, new Date(session.getLastAccessedTime()),
-						Thread.currentThread().getName());
-			} catch (ReflectiveOperationException e1) {
-				throw new ClassNotFoundException("error loading session " + id, e1);
+						threadName);
+
+				setThreadLocalSession(session);
+			} catch (ReflectiveOperationException roe) {
+				warn("Error loading session: %s", id);
+				throw roe;
 			}
 		}
-
 		return session;
+	}
+
+	private BasicDBObject sessionQuery(String id) {
+		return new BasicDBObject(idProperty, id).append(appContextProperty, this.getName());
 	}
 
 	/**
 	 * {@inheritDoc}
 	 */
 	public void remove(String id) throws IOException {
-		BasicDBObject sessionQuery = new BasicDBObject();
-		sessionQuery.put(idProperty, id);
-		sessionQuery.put(appContextProperty, this.getName());
-
+		BasicDBObject sessionQuery = sessionQuery(id);
 		try {
 			this.collection.remove(sessionQuery);
 			debug("removed session %s (query: %s)", id, sessionQuery);
@@ -366,22 +385,18 @@ public class MongoStore extends StoreBase {
 
 			byte[] data = bos.toByteArray();
 
-			BasicDBObject mongoSession = new BasicDBObject();
-			mongoSession.put(idProperty, session.getIdInternal());
-			mongoSession.put(appContextProperty, this.getName());
+			BasicDBObject sessionQuery = sessionQuery(session.getIdInternal());
+			BasicDBObject mongoSession = (BasicDBObject) sessionQuery.copy();
 			mongoSession.put(creationTimeProperty, session.getCreationTime());
 			mongoSession.put(sessionDataProperty, data);
 			mongoSession.put(lastModifiedProperty, Calendar.getInstance().getTime());
-
-			BasicDBObject sessionQuery = new BasicDBObject();
-			sessionQuery.put(idProperty, session.getId());
 
 			WriteResult updated = this.collection.update(sessionQuery, mongoSession, true, false);
 			debug("Saved session %s with query %s in %s ms (lastModified %s) acknowledged: %s", session.getId(),
 					sessionQuery, System.currentTimeMillis() - start, mongoSession.getDate(lastModifiedProperty),
 					updated.wasAcknowledged());
 		} catch (MongoException e) {
-			getLog().error("Unable to save session to MongoDB", e);
+			warn("Error saving session: %s", session.getIdInternal());
 			throw e;
 		}
 	}
@@ -392,9 +407,21 @@ public class MongoStore extends StoreBase {
 		}
 	}
 
+	private void trace(String message, Object... args) {
+		if (getLog().isTraceEnabled()) {
+			getLog().trace(String.format(message, args));
+		}
+	}
+
 	private void info(String message, Object... args) {
 		if (getLog().isInfoEnabled()) {
 			getLog().info(String.format(message, args));
+		}
+	}
+
+	private void warn(String message, Object... args) {
+		if (getLog().isWarnEnabled()) {
+			getLog().warn(String.format(message, args));
 		}
 	}
 
@@ -461,26 +488,25 @@ public class MongoStore extends StoreBase {
 				}
 				MongoClientOptions options = MongoClientOptions.builder().connectTimeout(connectionTimeoutMs)
 						.maxWaitTime(connectionWaitTimeoutMs).connectionsPerHost(maxPoolSize).writeConcern(writeConcern)
-						.readPreference(readPreference).readConcern(readConcern).build();
+						.readPreference(readPreference).readConcern(readConcern).requiredReplicaSetName(replicaSet)
+						.build();
 
 				List<ServerAddress> hosts = new ArrayList<ServerAddress>();
-				String[] dbHosts = this.hosts.split(",");
-				for (String dbHost : dbHosts) {
+				for (String dbHost : this.hosts.split(",")) {
 					String[] hostInfo = dbHost.split(":");
-					ServerAddress address = new ServerAddress(hostInfo[0], Integer.parseInt(hostInfo[1]));
-					hosts.add(address);
+					hosts.add(new ServerAddress(hostInfo[0], Integer.parseInt(hostInfo[1])));
 				}
 
 				info("%s [%s]: Connecting to MongoDB [%s]", getStoreName(), this.getName(), this.hosts);
 
-				List<MongoCredential> credentials = new ArrayList<MongoCredential>();
 				if (this.username != null || this.password != null) {
 					info("%s [%s]: Authenticating using [%s]", getStoreName(), this.getName(), this.username);
-					for (int i = 0; i < hosts.size(); i++) {
-						credentials.add(MongoCredential.createCredential(username, dbName, password.toCharArray()));
-					}
+					MongoCredential credential = MongoCredential.createCredential(username, dbName,
+							password.toCharArray());
+					this.mongoClient = new MongoClient(hosts, credential, options);
+				} else {
+					this.mongoClient = new MongoClient(hosts, options);
 				}
-				this.mongoClient = new MongoClient(hosts, credentials, options);
 			}
 
 			info("%s [%s]: Using Database [%s]", getStoreName(), this.getName(), this.dbName);
@@ -527,6 +553,15 @@ public class MongoStore extends StoreBase {
 		return log;
 	}
 
+	void removeThreadLocalSession() {
+		currentSession.remove();
+	}
+
+	void setThreadLocalSession(Session session) {
+		currentSession.set(session);
+	}
+
+	// Setters
 	public void setConnectionUri(String connectionUri) {
 		this.connectionUri = connectionUri;
 	}

@@ -63,6 +63,27 @@ public final class MongoPersistentManager extends PersistentManagerBase {
 	}
 
 	@Override
+	public Session createSession(String sessionId) {
+		Session session = super.createSession(sessionId);
+		try {
+			save(session);
+		} catch (IOException e) {
+			log.warn(String.format("Error creating session: %s", session.getIdInternal()));
+			session = null;
+		}
+		getStore().setThreadLocalSession(session);
+		return session;
+	}
+
+	public void afterRequest() {
+		getStore().removeThreadLocalSession();
+	}
+
+	public void save(Session session) throws IOException {
+		getStore().save(session);
+	}
+
+	@Override
 	public void add(Session session) {
 		// do nothing, we don't want to use Map<String,Session> sessions!
 	}
