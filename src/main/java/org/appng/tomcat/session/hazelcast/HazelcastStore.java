@@ -19,7 +19,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.util.Map;
 
 import org.apache.catalina.Session;
 import org.apache.catalina.Store;
@@ -37,6 +36,7 @@ import com.hazelcast.config.MulticastConfig;
 import com.hazelcast.config.NetworkConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.core.IMap;
 import com.hazelcast.core.ReplicatedMap;
 
 /**
@@ -158,7 +158,7 @@ public class HazelcastStore extends StoreBase {
 		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
 			((StandardSession) session).writeObjectData(oos);
-			getSessions().put(session.getId(), bos.toByteArray());
+			getSessions().set(session.getId(), bos.toByteArray());
 			log.debug("saved: " + session.getId());
 		}
 	}
@@ -180,6 +180,15 @@ public class HazelcastStore extends StoreBase {
 			StandardSession session = (StandardSession) this.manager.createEmptySession();
 			session.readObjectData(ois);
 			log.debug("loaded: " + id);
+
+			// pessimistic lock block to prevent concurrency problems whilst finding sessions
+			getSessions().lock(id);
+            try {
+            	getSessions().remove(id);
+            	getSessions().set(id, data);
+            } finally {
+            	getSessions().unlock(id);
+            }
 			return session;
 		}
 	}
@@ -201,8 +210,8 @@ public class HazelcastStore extends StoreBase {
 		getSessions().clear();
 	}
 
-	private Map<String, byte[]> getSessions() {
-		return instance.getReplicatedMap(getManager().getName() + mapName);
+	private IMap<String, byte[]> getSessions() {
+		return instance.getMap(getManager().getName() + mapName);
 	}
 
 	// getters and setters
