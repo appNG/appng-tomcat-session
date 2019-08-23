@@ -129,7 +129,7 @@ public class Utils {
 			}
 
 			public void warn(Object message) {
-				callRealMethod("trace", message);
+				callRealMethod("warn", message);
 			}
 
 			public void trace(Object message, Throwable t) {

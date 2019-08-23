@@ -76,9 +76,6 @@ public class MongoStore extends StoreBase {
 	/** Property used to store the Session's data. */
 	protected static final String sessionDataProperty = "data";
 
-	/** Property used to store the name of the thread that loaded the session at last */
-	private static final String THREAD_PROPERTY = "thread";
-
 	/** Default Name of the Collection where the Sessions will be stored. */
 	protected static final String sessionCollectionName = "tomcat.sessions";
 
@@ -276,10 +273,10 @@ public class MongoStore extends StoreBase {
 		StandardSession session = (StandardSession) currentSession.get();
 		if (null != session) {
 			if (session.getIdInternal().equals(id)) {
-				debug("Session from ThreadLocal: %s", id);
+				trace("Session from ThreadLocal: %s", id);
 				return session;
 			} else {
-				warn("Session from ThreadLocal differed! Requested: %s, found: %s", id, session.getIdInternal());
+				debug("Session from ThreadLocal differed! Requested: %s, found: %s", id, session.getIdInternal());
 				removeThreadLocalSession();
 				session = null;
 			}
@@ -290,25 +287,8 @@ public class MongoStore extends StoreBase {
 		BasicDBObject sessionQuery = sessionQuery(id);
 		DBObject mongoSession = this.collection.findOne(sessionQuery);
 		if (null == mongoSession) {
+			info("Session %s not found, returning null!", id);
 			return null;
-		}
-
-		long waited = 0;
-		while (waited < maxWaitTime && mongoSession.containsField(THREAD_PROPERTY)) {
-			debug("Session %s is still used by Thread %s", id, mongoSession.get(THREAD_PROPERTY));
-			try {
-				Thread.sleep(waitTime);
-				waited += waitTime;
-			} catch (InterruptedException e) {
-				// ignore
-			}
-			mongoSession = this.collection.findOne(sessionQuery);
-		}
-		if (waited >= maxWaitTime) {
-			info("waited more than %sms, proceeding!", maxWaitTime);
-		}
-		if (null != mongoSession.get(THREAD_PROPERTY)) {
-			debug("Session %s is still used by Thread %s", id, mongoSession.get(THREAD_PROPERTY));
 		}
 
 		Container container = manager.getContext();
@@ -324,19 +304,16 @@ public class MongoStore extends StoreBase {
 				session.readObjectData(ois);
 				session.setManager(this.manager);
 
-				String threadName = Thread.currentThread().getName();
-				BasicDBObject setThread = new BasicDBObject("$set", new BasicDBObject(THREAD_PROPERTY, threadName));
-				this.collection.update(sessionQuery, setThread);
-
-				debug("Loaded session %s with query %s in %s ms (lastModified %s), owned by thread [%s]", id,
-						sessionQuery, System.currentTimeMillis() - start, new Date(session.getLastAccessedTime()),
-						threadName);
+				debug("Loaded session %s with query %s in %s ms (lastModified %s)", id, sessionQuery,
+						System.currentTimeMillis() - start, new Date(session.getLastAccessedTime()));
 
 				setThreadLocalSession(session);
 			} catch (ReflectiveOperationException roe) {
-				warn("Error loading session: %s", id);
+				getLog().error(String.format("Error loading session: %s", id), roe);
 				throw roe;
 			}
+		} else {
+			warn("No data for session: %s", id);
 		}
 		return session;
 	}
