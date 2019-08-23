@@ -1,0 +1,7 @@
+Release Notes - appNG Tomcat Session - Version 0.2.0 (2019-08-23)
+-----------------------------------------------------------------
+* [ATS-16] - Release of 0.2.0
+* [ATS-15] - Add socket timeout option for MongoStore
+* [ATS-14] - Erroneous concurrency behavior for newly created session after a user logged in
+* [ATS-13] - Update Mongo Java Driver
+* [ATS-12] - Provide an implementation using Hazelcast
