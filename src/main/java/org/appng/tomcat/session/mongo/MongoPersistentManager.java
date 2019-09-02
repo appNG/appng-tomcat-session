@@ -65,18 +65,19 @@ public final class MongoPersistentManager extends PersistentManagerBase {
 	@Override
 	public Session createSession(String sessionId) {
 		Session session = super.createSession(sessionId);
+		getStore().setSessionActive(session);
 		try {
 			save(session);
 		} catch (IOException e) {
 			log.warn(String.format("Error creating session: %s", session.getIdInternal()));
 			session = null;
+			getStore().setSessionInactive();
 		}
-		getStore().setThreadLocalSession(session);
 		return session;
 	}
 
 	public void afterRequest() {
-		getStore().removeThreadLocalSession();
+		getStore().setSessionInactive();
 	}
 
 	public void save(Session session) throws IOException {

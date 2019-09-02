@@ -57,7 +57,11 @@ import com.mongodb.WriteResult;
  */
 public class MongoStore extends StoreBase {
 
+	/** The currently active session for this thread */
 	protected ThreadLocal<Session> currentSession = new ThreadLocal<>();
+	
+	/** The ID of the currently active session for this thread */
+	protected ThreadLocal<String> currentSessionId = new ThreadLocal<>();
 
 	private final Log log = Utils.getLog(MongoStore.class);
 
@@ -269,51 +273,48 @@ public class MongoStore extends StoreBase {
 	 * {@inheritDoc}
 	 */
 	public StandardSession load(String id) throws ClassNotFoundException, IOException {
+		StandardSession session = null;
 
-		StandardSession session = (StandardSession) currentSession.get();
-		if (null != session) {
-			if (session.getIdInternal().equals(id)) {
-				trace("Session from ThreadLocal: %s", id);
-				return session;
-			} else {
-				debug("Session from ThreadLocal differed! Requested: %s, found: %s", id, session.getIdInternal());
-				removeThreadLocalSession();
-				session = null;
-			}
-		}
-
-		long start = System.currentTimeMillis();
-
-		BasicDBObject sessionQuery = sessionQuery(id);
-		DBObject mongoSession = this.collection.findOne(sessionQuery);
-		if (null == mongoSession) {
-			info("Session %s not found, returning null!", id);
-			return null;
-		}
-
-		Container container = manager.getContext();
-		Context context = (Context) container;
-		ClassLoader appContextLoader = context.getLoader().getClassLoader();
-
-		byte[] data = (byte[]) mongoSession.get(sessionDataProperty);
-		if (data != null) {
-			try (ObjectInputStream ois = Utils.getObjectInputStream(appContextLoader,
-					manager.getContext().getServletContext(), data)) {
-
-				session = (StandardSession) this.manager.createEmptySession();
-				session.readObjectData(ois);
-				session.setManager(this.manager);
-
-				debug("Loaded session %s with query %s in %s ms (lastModified %s)", id, sessionQuery,
-						System.currentTimeMillis() - start, new Date(session.getLastAccessedTime()));
-
-				setThreadLocalSession(session);
-			} catch (ReflectiveOperationException roe) {
-				getLog().error(String.format("Error loading session: %s", id), roe);
-				throw roe;
-			}
+		if (null == id) {
+			setSessionInactive();
+		} else if (id.equals(currentSessionId.get())) {			
+			session = (StandardSession) currentSession.get();
+			debug("Returning currently active session %s for thread %s", currentSessionId.get(),
+					Thread.currentThread().getName());
 		} else {
-			warn("No data for session: %s", id);
+			long start = System.currentTimeMillis();
+			BasicDBObject sessionQuery = sessionQuery(id);
+			DBObject mongoSession = this.collection.findOne(sessionQuery);
+			if (null == mongoSession) {
+				info("Session %s not found, returning null!", id);
+				setSessionInactive();
+			} else {
+				Container container = manager.getContext();
+				Context context = (Context) container;
+				ClassLoader appContextLoader = context.getLoader().getClassLoader();
+
+				byte[] data = (byte[]) mongoSession.get(sessionDataProperty);
+				if (data != null) {
+					try (ObjectInputStream ois = Utils.getObjectInputStream(appContextLoader,
+							manager.getContext().getServletContext(), data)) {
+
+						session = (StandardSession) this.manager.createEmptySession();
+						session.readObjectData(ois);
+						session.setManager(this.manager);
+
+						debug("Loaded session %s with query %s in %s ms (lastModified %s)", id, sessionQuery,
+								System.currentTimeMillis() - start, new Date(session.getLastAccessedTime()));
+
+						setSessionActive(session);
+					} catch (ReflectiveOperationException roe) {
+						getLog().error(String.format("Error loading session: %s", id), roe);
+						throw roe;
+					}
+				} else {
+					warn("No data for session: %s, returning null!", id);
+					setSessionInactive();
+				}
+			}
 		}
 		return session;
 	}
@@ -533,12 +534,17 @@ public class MongoStore extends StoreBase {
 		return log;
 	}
 
-	void removeThreadLocalSession() {
+	void setSessionInactive() {
+		String id = currentSessionId.get();
+		debug("Removing session from thread %s: %s", Thread.currentThread().getName(), id);
 		currentSession.remove();
+		currentSessionId.remove();
 	}
 
-	void setThreadLocalSession(Session session) {
+	void setSessionActive(Session session) {
 		currentSession.set(session);
+		currentSessionId.set(session.getId());
+		debug("Setting session for thread %s: %s", Thread.currentThread().getName(), session.getId());
 	}
 
 	// Setters
