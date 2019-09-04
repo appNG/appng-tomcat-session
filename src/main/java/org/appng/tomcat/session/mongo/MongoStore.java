@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.catalina.Container;
@@ -59,9 +61,12 @@ public class MongoStore extends StoreBase {
 
 	/** The currently active session for this thread */
 	protected ThreadLocal<Session> currentSession = new ThreadLocal<>();
-	
+
 	/** The ID of the currently active session for this thread */
 	protected ThreadLocal<String> currentSessionId = new ThreadLocal<>();
+
+	/** A map of currently used threads (ID -> thread-name) */
+	protected ConcurrentMap<String, String> sessionsInUse = new ConcurrentHashMap<>();
 
 	private final Log log = Utils.getLog(MongoStore.class);
 
@@ -277,11 +282,24 @@ public class MongoStore extends StoreBase {
 
 		if (null == id) {
 			setSessionInactive();
-		} else if (id.equals(currentSessionId.get())) {			
+		} else if (id.equals(currentSessionId.get())) {
 			session = (StandardSession) currentSession.get();
 			debug("Returning currently active session %s for thread %s", currentSessionId.get(),
 					Thread.currentThread().getName());
 		} else {
+			String owningThread = null;
+			int waited = 0;
+			while ((owningThread = sessionsInUse.get(id)) != null
+					&& !owningThread.equals(Thread.currentThread().getName()) && waited < maxWaitTime) {
+				info("Session %s is still used by thread %s, waiting %sms.", id, owningThread, waitTime);
+				try {
+					Thread.sleep(waitTime);
+				} catch (InterruptedException e) {
+					// ignore
+				}
+				waited += waitTime;
+			}
+
 			long start = System.currentTimeMillis();
 			BasicDBObject sessionQuery = sessionQuery(id);
 			DBObject mongoSession = this.collection.findOne(sessionQuery);
@@ -539,11 +557,15 @@ public class MongoStore extends StoreBase {
 		debug("Removing session from thread %s: %s", Thread.currentThread().getName(), id);
 		currentSession.remove();
 		currentSessionId.remove();
+		if (id != null) {
+			sessionsInUse.remove(id);
+		}
 	}
 
 	void setSessionActive(Session session) {
 		currentSession.set(session);
 		currentSessionId.set(session.getId());
+		sessionsInUse.put(session.getId(), Thread.currentThread().getName());
 		debug("Setting session for thread %s: %s", Thread.currentThread().getName(), session.getId());
 	}
 
