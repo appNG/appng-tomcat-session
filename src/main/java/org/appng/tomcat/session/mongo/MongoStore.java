@@ -304,8 +304,8 @@ public class MongoStore extends StoreBase {
 			BasicDBObject sessionQuery = sessionQuery(id);
 			DBObject mongoSession = this.collection.findOne(sessionQuery);
 			if (null == mongoSession) {
-				info("Session %s not found, returning null!", id);
-				setSessionInactive();
+				info("Session %s not found for thread %s (active session is %s), returning null!", id,
+						Thread.currentThread().getName(), currentSessionId.get());
 			} else {
 				Container container = manager.getContext();
 				Context context = (Context) container;
