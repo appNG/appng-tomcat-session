@@ -1,10 +1,10 @@
 image::https://www.aiticon.com/assets/images/appng_logo_760px.jpg[]
 
-:version: 0.2.0-SNAPSHOT
+:version: 0.2.2-SNAPSHOT
 :mongo-version: 3.10.2
 :jedis-version: 3.1.0
 :pool2-version: 2.6.2
-:hazelcast-version: 3.12.2
+:hazelcast-version: 3.12.3
 
 == appNG Tomcat Session
 This library contains implementations of http://tomcat.apache.org/[Apache Tomcat^]s 
@@ -97,17 +97,23 @@ Add the following into your Tomcat `context.xml` (or the context block of the `s
 
 	<!-- standard configuration, using multicast -->
 	<Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="multicast" port="5701" instanceName="appNG" group="dev"
-		multicastGroup="224.2.2.3" multicastPort="54327" multicastTimeoutSeconds="2" multicastTimeToLive="32"/>
+		multicastGroup="224.2.2.3" multicastPort="54327" multicastTimeoutSeconds="2" multicastTimeToLive="32" />
+	<!-- optionally, for all modes except 'classpath':
+		managementCenterUrl="http://localhost:8080/hazelcast-mancenter"
+	-->
 
+	<!-- uses a config file from the classpath -->
+	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="classpath" configFile="hazelcast.xml" /-->  
+	
 	<!-- uses tcp, allowing to use a comma separated list of addresses -->	
-	<!--Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="tcp" port="5701" instanceName="appNG" group="dev"
+	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="tcp" port="5701" instanceName="appNG" group="dev"
 		tcpMembers="localhost:5701" /-->
 
 	<!-- client mode, allowing to use a comma separated list of addresses -->
 	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="client" instanceName="appNG" group="dev"
 		addresses="localhost:5701" /-->
 	
-	<-- standalone mode, for development purposes -->
+	<!-- standalone mode, for development purposes -->
 	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="standalone" port="5701" instanceName="appNG" group="dev" /-->
 </Manager>
 ----

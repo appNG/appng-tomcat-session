@@ -75,7 +75,7 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 	@Override
 	public String getName() {
 		if (this.name == null) {
-			this.name = Utils.getContextName(getContext());
+			this.name = Utils.getContextName(getContext()).replace('/', '_');
 		}
 		return this.name;
 	}

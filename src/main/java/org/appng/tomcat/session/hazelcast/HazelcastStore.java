@@ -29,11 +29,13 @@ import org.appng.tomcat.session.Utils;
 
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
+import com.hazelcast.config.ClasspathXmlConfig;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.GroupConfig;
-import com.hazelcast.config.JoinConfig;
+import com.hazelcast.config.ManagementCenterConfig;
 import com.hazelcast.config.MulticastConfig;
 import com.hazelcast.config.NetworkConfig;
+import com.hazelcast.config.TcpIpConfig;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.core.IMap;
@@ -87,24 +89,18 @@ public class HazelcastStore extends StoreBase {
 	private int multicastTimeToLive = MulticastConfig.DEFAULT_MULTICAST_TTL;
 
 	private String tcpMembers;
+	private String managementCenterUrl;
 	private String instanceName = "appNG";
+	private String configFile = "hazelcast.xml";
 
 	public enum Mode {
-		MULTICAST, TCP, CLIENT, STANDALONE;
+		MULTICAST, TCP, CLIENT, STANDALONE, CLASSPATH;
 	}
 
 	@Override
 	protected void initInternal() {
 		super.initInternal();
-		Config config = new Config();
-		config.setInstanceName(instanceName);
-		GroupConfig groupConfig = new GroupConfig();
-		groupConfig.setName(group);
-		config.setGroupConfig(groupConfig);
-		config.getNetworkConfig().setPort(port);
-		JoinConfig joinConfig = config.getNetworkConfig().getJoin();
-		joinConfig.getTcpIpConfig().setEnabled(false);
-		joinConfig.getMulticastConfig().setEnabled(false);
+		Config config = getConfig();
 		switch (mode) {
 		case CLIENT:
 			instance = HazelcastClient.getHazelcastClientByName(instanceName);
@@ -125,27 +121,57 @@ public class HazelcastStore extends StoreBase {
 			return;
 
 		case TCP:
-			joinConfig.getTcpIpConfig().setEnabled(true);
+			TcpIpConfig tcpIpConfig = config.getNetworkConfig().getJoin().getTcpIpConfig();
+			tcpIpConfig.setEnabled(true);
 			if (null != tcpMembers) {
-				joinConfig.getTcpIpConfig().addMember(tcpMembers);
+				tcpIpConfig.addMember(tcpMembers);
+				log.info("Using TCP mode with members: " + tcpMembers);
+			} else {
+				log.warn("TCP mode is used, but tcpMembers is not set!");
 			}
 			instance = Hazelcast.getOrCreateHazelcastInstance(config);
 			break;
 
 		case MULTICAST:
-			joinConfig.getMulticastConfig().setEnabled(true);
-			joinConfig.getMulticastConfig().setMulticastGroup(multicastGroup);
-			joinConfig.getMulticastConfig().setMulticastPort(multicastPort);
-			joinConfig.getMulticastConfig().setMulticastTimeoutSeconds(multicastTimeoutSeconds);
-			joinConfig.getMulticastConfig().setMulticastTimeToLive(multicastTimeToLive);
+			MulticastConfig multicastConfig = config.getNetworkConfig().getJoin().getMulticastConfig();
+			multicastConfig.setEnabled(true);
+			multicastConfig.setMulticastGroup(multicastGroup);
+			multicastConfig.setMulticastPort(multicastPort);
+			multicastConfig.setMulticastTimeoutSeconds(multicastTimeoutSeconds);
+			multicastConfig.setMulticastTimeToLive(multicastTimeToLive);
+			log.info("Using MULTICAST on " + multicastGroup + ":" + multicastPort);
 			instance = Hazelcast.getOrCreateHazelcastInstance(config);
 			break;
-
+		case CLASSPATH:
+			config = new ClasspathXmlConfig(configFile);
+			instance = Hazelcast.getOrCreateHazelcastInstance(config);
+			log.info("Using classpath config:" + getClass().getClassLoader().getResource(configFile));
+			break;
 		default:
 			instance = Hazelcast.getOrCreateHazelcastInstance(config);
+			log.info("Using STANDALONE config");
 			break;
 		}
 		log.info(String.format("Using instance %s", instance));
+	}
+
+	private Config getConfig() {
+		Config config = new Config();
+		config.setInstanceName(instanceName);
+		GroupConfig groupConfig = new GroupConfig();
+		groupConfig.setName(group);
+		config.setGroupConfig(groupConfig);
+		config.getNetworkConfig().setPort(port);
+		if (null != managementCenterUrl) {
+			ManagementCenterConfig manCenterConfig = new ManagementCenterConfig();
+			config.setManagementCenterConfig(manCenterConfig);
+			manCenterConfig.setEnabled(true);
+			manCenterConfig.setUrl(managementCenterUrl);
+			log.info("Using management center at " + managementCenterUrl);
+		}
+		config.getNetworkConfig().getJoin().getTcpIpConfig().setEnabled(false);
+		config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
+		return config;
 	}
 
 	@Override
@@ -183,12 +209,12 @@ public class HazelcastStore extends StoreBase {
 
 			// pessimistic lock block to prevent concurrency problems whilst finding sessions
 			getSessions().lock(id);
-            try {
-            	getSessions().remove(id);
-            	getSessions().set(id, data);
-            } finally {
-            	getSessions().unlock(id);
-            }
+			try {
+				getSessions().remove(id);
+				getSessions().set(id, data);
+			} finally {
+				getSessions().unlock(id);
+			}
 			return session;
 		}
 	}
@@ -259,6 +285,22 @@ public class HazelcastStore extends StoreBase {
 
 	public void setInstanceName(String instanceName) {
 		this.instanceName = instanceName;
+	}
+
+	public String getManagementCenterUrl() {
+		return managementCenterUrl;
+	}
+
+	public void setManagementCenterUrl(String managementCenterUrl) {
+		this.managementCenterUrl = managementCenterUrl;
+	}
+
+	public String getConfigFile() {
+		return configFile;
+	}
+
+	public void setConfigFile(String configFile) {
+		this.configFile = configFile;
 	}
 
 }
