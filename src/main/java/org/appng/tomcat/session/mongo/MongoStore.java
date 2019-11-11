@@ -191,6 +191,15 @@ public class MongoStore extends StoreBase {
 	private int socketTimeout = 10000;
 
 	/**
+	 * Sets the server selection timeout in milliseconds, which defines how long the driver will wait for server
+	 * selection to succeed before throwing an exception.
+	 */
+	private int serverSelectionTimeout = 30000;
+
+	/** Sets whether writes should be retried if they fail due to a network error. */
+	private boolean retryWrites = false;
+
+	/**
 	 * Retrieve the unique Context name for this Manager. This will be used to separate out sessions from different
 	 * application Contexts.
 	 * 
@@ -487,6 +496,7 @@ public class MongoStore extends StoreBase {
 				}
 				MongoClientOptions options = MongoClientOptions.builder().connectTimeout(connectionTimeoutMs)
 						.maxWaitTime(connectionWaitTimeoutMs).connectionsPerHost(maxPoolSize).writeConcern(writeConcern)
+						.serverSelectionTimeout(serverSelectionTimeout).retryWrites(retryWrites)
 						.readPreference(readPreference).readConcern(readConcern).requiredReplicaSetName(replicaSet)
 						.socketTimeout(socketTimeout).build();
 
