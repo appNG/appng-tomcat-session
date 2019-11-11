@@ -656,4 +656,11 @@ public class MongoStore extends StoreBase {
 		this.readConcern = new ReadConcern(ReadConcernLevel.valueOf(readConcern));
 	}
 
+	public void setServerSelectionTimeout(int serverSelectionTimeout) {
+		this.serverSelectionTimeout = serverSelectionTimeout;
+	}
+
+	public void setRetryWrites(boolean retryWrites) {
+		this.retryWrites = retryWrites;
+	}
 }
