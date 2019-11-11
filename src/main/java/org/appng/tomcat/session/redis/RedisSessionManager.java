@@ -420,6 +420,16 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 		return session;
 	}
 
+	@Override
+	public Session[] findSessions() {
+		try {
+			return Utils.findSessions(this, keys(), log);
+		} catch (IOException e) {
+			log.error("error finding sessions!", e);
+		}
+		return new Session[0];
+	}
+
 	public void clear() {
 		Jedis jedis = null;
 		Boolean error = true;

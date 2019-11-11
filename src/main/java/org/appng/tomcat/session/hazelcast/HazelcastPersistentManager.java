@@ -73,6 +73,16 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 	}
 
 	@Override
+	public Session[] findSessions() {
+		try {
+			return Utils.findSessions(this, getStore().keys(), log);
+		} catch (IOException e) {
+			log.error("error finding sessions!", e);
+		}
+		return new Session[0];
+	}
+
+	@Override
 	public String getName() {
 		if (this.name == null) {
 			this.name = Utils.getContextName(getContext()).replace('/', '_');

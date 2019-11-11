@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.lang.reflect.Constructor;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,8 @@ import javax.servlet.ServletContext;
 
 import org.apache.catalina.Container;
 import org.apache.catalina.Context;
+import org.apache.catalina.Manager;
+import org.apache.catalina.Session;
 import org.apache.catalina.connector.Request;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
@@ -214,6 +217,21 @@ public class Utils {
 			}
 		}
 		return "/" + engineName + "/" + hostName + contextName;
+	}
+
+	public static Session[] findSessions(Manager manager, String[] keys, Log log) {
+		List<Session> sessions = new ArrayList<>();
+		for (String key : keys) {
+			try {
+				Session session = manager.findSession(key);
+				if (null != session) {
+					sessions.add(session);
+				}
+			} catch (IOException e) {
+				log.warn(String.format("Error loading session: %s", key));
+			}
+		}
+		return sessions.toArray(new Session[0]);
 	}
 
 }

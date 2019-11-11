@@ -22,14 +22,14 @@ import org.apache.catalina.Manager;
 import org.apache.catalina.Session;
 import org.apache.catalina.session.PersistentManagerBase;
 import org.apache.juli.logging.Log;
-import org.apache.juli.logging.LogFactory;
+import org.appng.tomcat.session.Utils;
 
 /**
  * A {@link Manager} implementation that uses a {@link MongoStore}
  */
 public final class MongoPersistentManager extends PersistentManagerBase {
 
-	private static final Log log = LogFactory.getLog(MongoPersistentManager.class);
+	private static final Log log = Utils.getLog(MongoPersistentManager.class);
 
 	/**
 	 * The descriptive information about this implementation.
@@ -105,6 +105,16 @@ public final class MongoPersistentManager extends PersistentManagerBase {
 			throw new IOException("error loading class for session " + id, e);
 		}
 		return session;
+	}
+
+	@Override
+	public Session[] findSessions() {
+		try {
+			return Utils.findSessions(this, getStore().keys(), log);
+		} catch (IOException e) {
+			log.error("error finding sessions!", e);
+		}
+		return new Session[0];
 	}
 
 	protected synchronized void startInternal() throws LifecycleException {
