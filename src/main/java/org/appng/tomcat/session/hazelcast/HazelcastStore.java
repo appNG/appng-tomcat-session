@@ -195,28 +195,26 @@ public class HazelcastStore extends StoreBase {
 	}
 
 	public StandardSession load(String id) throws ClassNotFoundException, IOException {
-		byte[] data = getSessions().get(id);
-		if (null == data) {
-			return null;
-		}
-
-		ClassLoader appContextLoader = getManager().getContext().getLoader().getClassLoader();
-		try (ObjectInputStream ois = Utils.getObjectInputStream(appContextLoader,
-				manager.getContext().getServletContext(), data)) {
-			StandardSession session = (StandardSession) this.manager.createEmptySession();
-			session.readObjectData(ois);
-			log.debug("loaded: " + id);
-
+		StandardSession session = null;
+		try {
 			// pessimistic lock block to prevent concurrency problems whilst finding sessions
 			getSessions().lock(id);
-			try {
-				getSessions().remove(id);
-				getSessions().set(id, data);
-			} finally {
-				getSessions().unlock(id);
+			byte[] data = getSessions().get(id);
+			if (null == data) {
+				log.debug(String.format("Session %s not found in map %s", id, getMapNameInternal()));
+			} else {
+				ClassLoader appContextLoader = getManager().getContext().getLoader().getClassLoader();
+				try (ObjectInputStream ois = Utils.getObjectInputStream(appContextLoader,
+						manager.getContext().getServletContext(), data)) {
+					session = (StandardSession) this.manager.createEmptySession();
+					session.readObjectData(ois);
+					log.debug("loaded: " + id);
+				}
 			}
-			return session;
+		} finally {
+			getSessions().unlock(id);
 		}
+		return session;
 	}
 
 	public void remove(String id) throws IOException {
@@ -237,7 +235,11 @@ public class HazelcastStore extends StoreBase {
 	}
 
 	private IMap<String, byte[]> getSessions() {
-		return instance.getMap(getManager().getName() + mapName);
+		return instance.getMap(getMapNameInternal());
+	}
+
+	private String getMapNameInternal() {
+		return getManager().getName() + mapName;
 	}
 
 	// getters and setters
