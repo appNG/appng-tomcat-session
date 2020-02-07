@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 import javax.servlet.ServletContext;
+import javax.servlet.http.HttpSession;
 
 import org.apache.catalina.Container;
 import org.apache.catalina.Context;
@@ -67,8 +68,7 @@ public class Utils {
 
 	public static String getTemplatePrefix(ServletContext servletContext) {
 		try {
-			@SuppressWarnings("unchecked")
-			Map<String, Object> platformProperties = (Map<String, Object>) servletContext.getAttribute("PLATFORM");
+			Map<String, Object> platformProperties = getPlatform(servletContext);
 			if (null != platformProperties) {
 				Object platformConfig = platformProperties.get("platformConfig");
 				return (String) platformConfig.getClass().getMethod("getString", String.class).invoke(platformConfig,
@@ -78,6 +78,11 @@ public class Utils {
 			throw new IllegalArgumentException(e);
 		}
 		return null;
+	}
+
+	@SuppressWarnings("unchecked")
+	public static Map<String, Object> getPlatform(ServletContext servletContext) {
+		return (Map<String, Object>) servletContext.getAttribute("PLATFORM");
 	}
 
 	public static ObjectInputStream getObjectInputStream(ClassLoader classLoader, ServletContext ctx, byte[] data)
@@ -92,7 +97,6 @@ public class Utils {
 			Constructor<ObjectInputStream> constructor = (Constructor<ObjectInputStream>) classLoader
 					.loadClass(Constants.INPUT_STREAM_CLASS)
 					.getDeclaredConstructor(InputStream.class, ServletContext.class);
-
 			return constructor.newInstance(data, ctx);
 		} catch (ReflectiveOperationException e) {
 			// ignore, webapp is not appNG
@@ -232,6 +236,45 @@ public class Utils {
 			}
 		}
 		return sessions.toArray(new Session[0]);
+	}
+
+	public static String getSiteName(HttpSession session) {
+		Object metaData = session.getAttribute("metaData");
+		if (null != metaData) {
+			try {
+				return (String) metaData.getClass().getMethod("getSite").invoke(metaData);
+			} catch (ReflectiveOperationException e) {
+				// ignore
+			}
+		}
+		return null;
+	}
+
+	@SuppressWarnings("rawtypes")
+	private static ClassLoader getClassLoader(String siteName, Context context) {
+		Map<String, Object> platform = getPlatform(context.getServletContext());
+		if (null != platform && null != siteName) {
+			Object siteMap = (Map) platform.get("sites");
+			Object site;
+			if (null != siteMap && (site = ((Map) siteMap).get(siteName)) != null) {
+				try {
+					return (ClassLoader) site.getClass().getMethod("getSiteClassLoader").invoke(site);
+				} catch (ReflectiveOperationException e) {
+					// ignore
+				}
+			}
+		}
+		return context.getLoader().getClassLoader();
+	}
+
+	public static ObjectInputStream getObjectInputStream(InputStream in, String siteName, Context context)
+			throws IOException {
+		final ClassLoader classLoader = getClassLoader(siteName, context);
+		return new ObjectInputStream(in) {
+			protected Class<?> resolveClass(java.io.ObjectStreamClass desc) throws IOException, ClassNotFoundException {
+				return Class.forName(desc.getName(), false, classLoader);
+			}
+		};
 	}
 
 }

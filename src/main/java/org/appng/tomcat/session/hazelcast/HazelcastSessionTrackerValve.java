@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2019 the original author or authors.
+ * Copyright 2015-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,10 +44,10 @@ public class HazelcastSessionTrackerValve extends PersistentValve {
 			Session session = request.getSessionInternal(false);
 			if (session != null) {
 				if (session.isValid()) {
-					log.debug(String.format("Request with session completed, saving session %s", session.getId()));
+					log.trace(String.format("Request with session completed, saving session %s", session.getId()));
 					manager.getStore().save(session);
 				} else {
-					log.debug(String.format("HTTP Session has been invalidated, removing %s", session.getId()));
+					log.trace(String.format("HTTP Session has been invalidated, removing %s", session.getId()));
 					manager.remove(session);
 				}
 			}

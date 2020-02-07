@@ -4,7 +4,7 @@ image::https://www.aiticon.com/assets/images/appng_logo_760px.jpg[]
 :mongo-version: 3.10.2
 :jedis-version: 3.1.0
 :pool2-version: 2.6.2
-:hazelcast-version: 3.12.3
+:hazelcast-version: 4.0
 
 == appNG Tomcat Session
 This library contains implementations of http://tomcat.apache.org/[Apache Tomcat^]s 
@@ -85,7 +85,7 @@ Reboot the server, and sessions should now be stored in MongoDB.
 
 == Using Hazelcast
 The implementation is based on  https://hazelcast.org[Hazelcast^], 
-using a https://docs.hazelcast.org/docs/{hazelcast-version}/javadoc/com/hazelcast/core/ReplicatedMap.html[ReplicatedMap]
+using an https://docs.hazelcast.org/docs/{hazelcast-version}/javadoc/com/hazelcast/map/IMap.html[IMap].
 
 === Configuration
 Add the following into your Tomcat `context.xml` (or the context block of the `server.xml` if applicable.)
@@ -96,25 +96,25 @@ Add the following into your Tomcat `context.xml` (or the context block of the `s
 <Manager className="org.appng.tomcat.session.hazelcast.HazelcastPersistentManager">	
 
 	<!-- standard configuration, using multicast -->
-	<Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="multicast" port="5701" instanceName="appNG" group="dev"
+	<Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="multicast" port="5701" instanceName="dev" clusterName="appNG"
 		multicastGroup="224.2.2.3" multicastPort="54327" multicastTimeoutSeconds="2" multicastTimeToLive="32" />
 	<!-- optionally, for all modes except 'classpath':
-		managementCenterUrl="http://localhost:8080/hazelcast-mancenter"
+		managementCenterEnabled="true"
 	-->
 
 	<!-- uses a config file from the classpath -->
 	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="classpath" configFile="hazelcast.xml" /-->  
 	
 	<!-- uses tcp, allowing to use a comma separated list of addresses -->	
-	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="tcp" port="5701" instanceName="appNG" group="dev"
+	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="tcp" port="5701" instanceName="dev" clusterName="appNG"
 		tcpMembers="localhost:5701" /-->
 
 	<!-- client mode, allowing to use a comma separated list of addresses -->
-	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="client" instanceName="appNG" group="dev"
+	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="client" instanceName="dev" clusterName="appNG"
 		addresses="localhost:5701" /-->
 	
 	<!-- standalone mode, for development purposes -->
-	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="standalone" port="5701" instanceName="appNG" group="dev" /-->
+	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="standalone" port="5701" instanceName="dev" clusterName="appNG" /-->
 </Manager>
 ----
 
@@ -122,9 +122,6 @@ Copy the following files into the `TOMCAT_BASE/lib` directory:
 
 * appng-tomcat-session-{version}.jar
 * http://repo1.maven.org/maven2/com/hazelcast/hazelcast/{hazelcast-version}/hazelcast-{hazelcast-version}.jar[hazelcast-{hazelcast-version}.jar]
-
-When using `client`-mode, you also need
-* http://repo1.maven.org/maven2/com/hazelcast/hazelcast-client/{hazelcast-version}/hazelcast-client-{hazelcast-version}.jar[hazelcast-client-{hazelcast-version}.jar]
 
 Reboot the server, and sessions are now stored in Hazelcast.
 

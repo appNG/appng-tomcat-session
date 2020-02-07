@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2019 the original author or authors.
+ * Copyright 2015-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,34 +15,37 @@
  */
 package org.appng.tomcat.session.hazelcast;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.catalina.Session;
 import org.apache.catalina.Store;
 import org.apache.catalina.session.StandardSession;
 import org.apache.catalina.session.StoreBase;
 import org.apache.juli.logging.Log;
+import org.appng.tomcat.session.SessionData;
 import org.appng.tomcat.session.Utils;
 
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.config.ClasspathXmlConfig;
 import com.hazelcast.config.Config;
-import com.hazelcast.config.GroupConfig;
 import com.hazelcast.config.ManagementCenterConfig;
 import com.hazelcast.config.MulticastConfig;
 import com.hazelcast.config.NetworkConfig;
 import com.hazelcast.config.TcpIpConfig;
+import com.hazelcast.core.EntryEvent;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
-import com.hazelcast.core.IMap;
-import com.hazelcast.core.ReplicatedMap;
+import com.hazelcast.map.IMap;
+import com.hazelcast.map.listener.EntryEvictedListener;
 
 /**
- * A {@link Store} using Hazelcast's {@link ReplicatedMap} to store sessions.
+ * A {@link Store} using Hazelcast's {@link IMap} to store sessions.
  * <p/>
  * Configuration parameters (defaults in brackets):
  * <ul>
@@ -66,20 +69,21 @@ import com.hazelcast.core.ReplicatedMap;
  * The multicast ttl, only applies to 'multicast' mode.</li>
  * <li>tcpMembers (<i>null</i>)<br/>
  * A comma separated list of members to connect to, only applies to 'tcp' mode.</li>
- * <li>instanceName (appNG)<br/>
+ * <li>clusterName (appNG)<br/>
+ * The Hazelcast cluster name.</li>
+ * <li>instanceName (dev)<br/>
  * The Hazelcast instance name.</li>
  * </ul>
  * 
  * @author Matthias Müller
  */
-public class HazelcastStore extends StoreBase {
+public class HazelcastStore extends StoreBase implements EntryEvictedListener<String, SessionData> {
 
 	private final Log log = Utils.getLog(HazelcastStore.class);
 	private HazelcastInstance instance;
 
 	private String mapName = "tomcat.sessions";
 	private Mode mode = Mode.MULTICAST;
-	private String group = "dev";
 	private String addresses = "localhost:5701";
 	private int port = NetworkConfig.DEFAULT_PORT;
 
@@ -89,8 +93,9 @@ public class HazelcastStore extends StoreBase {
 	private int multicastTimeToLive = MulticastConfig.DEFAULT_MULTICAST_TTL;
 
 	private String tcpMembers;
-	private String managementCenterUrl;
-	private String instanceName = "appNG";
+	private boolean managementCenterEnabled;
+	private String clusterName = "appNG";
+	private String instanceName = "dev";
 	private String configFile = "hazelcast.xml";
 
 	public enum Mode {
@@ -106,7 +111,6 @@ public class HazelcastStore extends StoreBase {
 			instance = HazelcastClient.getHazelcastClientByName(instanceName);
 			if (null == instance) {
 				ClientConfig clientConfig = new ClientConfig();
-				clientConfig.getGroupConfig().setName(group);
 				clientConfig.setInstanceName(instanceName);
 				String[] addressArr = addresses.split(",");
 				for (String address : addressArr) {
@@ -153,21 +157,30 @@ public class HazelcastStore extends StoreBase {
 			break;
 		}
 		log.info(String.format("Using instance %s", instance));
+		getSessions().addEntryListener(this, true);
+	}
+
+	public void entryEvicted(EntryEvent<String, SessionData> event) {
+		SessionData oldValue = event.getOldValue();
+		String siteName = oldValue.getSite();
+
+		try (ByteArrayInputStream in = new ByteArrayInputStream(oldValue.getData());
+				ObjectInputStream ois = Utils.getObjectInputStream(in, siteName, getManager().getContext())) {
+			StandardSession session = new StandardSession(getManager());
+			session.readObjectData(ois);
+			session.expire(true);
+		} catch (IOException | ClassNotFoundException e) {
+			log.error("Error expiring session " + event.getKey(), e);
+		}
 	}
 
 	private Config getConfig() {
 		Config config = new Config();
+		config.setClusterName(clusterName);
 		config.setInstanceName(instanceName);
-		GroupConfig groupConfig = new GroupConfig();
-		groupConfig.setName(group);
-		config.setGroupConfig(groupConfig);
 		config.getNetworkConfig().setPort(port);
-		if (null != managementCenterUrl) {
-			ManagementCenterConfig manCenterConfig = new ManagementCenterConfig();
-			config.setManagementCenterConfig(manCenterConfig);
-			manCenterConfig.setEnabled(true);
-			manCenterConfig.setUrl(managementCenterUrl);
-			log.info("Using management center at " + managementCenterUrl);
+		if (managementCenterEnabled) {
+			config.setManagementCenterConfig(new ManagementCenterConfig());
 		}
 		config.getNetworkConfig().getJoin().getTcpIpConfig().setEnabled(false);
 		config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
@@ -184,8 +197,10 @@ public class HazelcastStore extends StoreBase {
 		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
 			((StandardSession) session).writeObjectData(oos);
-			getSessions().set(session.getId(), bos.toByteArray());
-			log.debug("saved: " + session.getId());
+			String site = Utils.getSiteName(session.getSession());
+			SessionData sessionData = new SessionData(session.getId(), site, bos.toByteArray());
+			getSessions().put(session.getId(), sessionData, session.getMaxInactiveInterval(), TimeUnit.SECONDS);
+			log.debug("saved: " + sessionData);
 		}
 	}
 
@@ -199,16 +214,16 @@ public class HazelcastStore extends StoreBase {
 		try {
 			// pessimistic lock block to prevent concurrency problems whilst finding sessions
 			getSessions().lock(id);
-			byte[] data = getSessions().get(id);
-			if (null == data) {
+			SessionData sessionData = getSessions().get(id);
+			if (null == sessionData) {
 				log.debug(String.format("Session %s not found in map %s", id, getMapNameInternal()));
 			} else {
-				ClassLoader appContextLoader = getManager().getContext().getLoader().getClassLoader();
-				try (ObjectInputStream ois = Utils.getObjectInputStream(appContextLoader,
-						manager.getContext().getServletContext(), data)) {
+				try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
+						ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(),
+								manager.getContext())) {
 					session = (StandardSession) this.manager.createEmptySession();
 					session.readObjectData(ois);
-					log.debug("loaded: " + id);
+					log.debug("loaded: " + sessionData);
 				}
 			}
 		} finally {
@@ -218,8 +233,8 @@ public class HazelcastStore extends StoreBase {
 	}
 
 	public void remove(String id) throws IOException {
-		getSessions().remove(id);
-		log.debug("removed" + id);
+		SessionData removed = getSessions().remove(id);
+		log.debug("removed: " + removed);
 	}
 
 	public String[] keys() throws IOException {
@@ -234,7 +249,7 @@ public class HazelcastStore extends StoreBase {
 		getSessions().clear();
 	}
 
-	private IMap<String, byte[]> getSessions() {
+	private IMap<String, SessionData> getSessions() {
 		return instance.getMap(getMapNameInternal());
 	}
 
@@ -253,8 +268,8 @@ public class HazelcastStore extends StoreBase {
 		}
 	}
 
-	public void setGroup(String group) {
-		this.group = group;
+	public void setClusterName(String clusterName) {
+		this.clusterName = clusterName;
 	}
 
 	public void setAddresses(String addresses) {
@@ -289,12 +304,8 @@ public class HazelcastStore extends StoreBase {
 		this.instanceName = instanceName;
 	}
 
-	public String getManagementCenterUrl() {
-		return managementCenterUrl;
-	}
-
-	public void setManagementCenterUrl(String managementCenterUrl) {
-		this.managementCenterUrl = managementCenterUrl;
+	public void setManagementCenterEnabled(boolean managementCenterEnabled) {
+		this.managementCenterEnabled = managementCenterEnabled;
 	}
 
 	public String getConfigFile() {
