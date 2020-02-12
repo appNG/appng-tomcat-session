@@ -17,7 +17,6 @@ package org.appng.tomcat.session.hazelcast;
 
 import java.io.IOException;
 
-import org.apache.catalina.LifecycleException;
 import org.apache.catalina.Session;
 import org.apache.catalina.session.PersistentManagerBase;
 import org.apache.juli.logging.Log;
@@ -28,11 +27,6 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 
 	private static final Log log = LogFactory.getLog(HazelcastPersistentManager.class);
 	private String name;
-
-	protected void destroyInternal() throws LifecycleException {
-		super.destroyInternal();
-		getStore().destroy();
-	}
 
 	@Override
 	public void processExpires() {
