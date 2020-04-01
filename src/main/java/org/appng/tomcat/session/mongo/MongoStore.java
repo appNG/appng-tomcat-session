@@ -19,6 +19,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
@@ -70,6 +72,9 @@ public class MongoStore extends StoreBase {
 
 	private final Log log = Utils.getLog(MongoStore.class);
 
+	/** Property used to store the name of the host that loaded the session at last */
+	private static final String HOST_PROPERTY = "host";
+
 	/** Property used to store the Session's ID */
 	private static final String idProperty = "session_id";
 
@@ -99,6 +104,9 @@ public class MongoStore extends StoreBase {
 
 	/** Name to register for the background thread. */
 	protected String threadName = "MongoStore";
+
+	/** The host name to use in {@value MongoStore#HOST_PROPERTY} */
+	protected String hostName;
 
 	/**
 	 * MongoDB Connection URI. This will override all other connection settings specified. For more information, please
@@ -199,6 +207,9 @@ public class MongoStore extends StoreBase {
 	/** Sets whether writes should be retried if they fail due to a network error. */
 	private boolean retryWrites = false;
 
+	/** Are sessions sticky ? */
+	private boolean sticky = false;
+
 	/**
 	 * Retrieve the unique Context name for this Manager. This will be used to separate out sessions from different
 	 * application Contexts.
@@ -296,22 +307,11 @@ public class MongoStore extends StoreBase {
 			debug("Returning currently active session %s for thread %s", currentSessionId.get(),
 					Thread.currentThread().getName());
 		} else {
-			String owningThread = null;
-			int waited = 0;
-			while ((owningThread = sessionsInUse.get(id)) != null
-					&& !owningThread.equals(Thread.currentThread().getName()) && waited < maxWaitTime) {
-				info("Session %s is still used by thread %s, waiting %sms.", id, owningThread, waitTime);
-				try {
-					Thread.sleep(waitTime);
-				} catch (InterruptedException e) {
-					// ignore
-				}
-				waited += waitTime;
-			}
 
-			long start = System.currentTimeMillis();
 			BasicDBObject sessionQuery = sessionQuery(id);
-			DBObject mongoSession = this.collection.findOne(sessionQuery);
+			long start = System.currentTimeMillis();
+			DBObject mongoSession = getMongoSession(id);
+
 			if (null == mongoSession) {
 				info("Session %s not found for thread %s (active session is %s), returning null!", id,
 						Thread.currentThread().getName(), currentSessionId.get());
@@ -329,6 +329,11 @@ public class MongoStore extends StoreBase {
 						session.readObjectData(ois);
 						session.setManager(this.manager);
 
+						if (!sticky) {
+							BasicDBObject setHost = new BasicDBObject("$set", new BasicDBObject(HOST_PROPERTY,
+									String.format("%s@%s", Thread.currentThread().getName(), hostName)));
+							this.collection.update(sessionQuery, setHost);
+						}
 						debug("Loaded session %s with query %s in %s ms (lastModified %s)", id, sessionQuery,
 								System.currentTimeMillis() - start, new Date(session.getLastAccessedTime()));
 
@@ -344,6 +349,48 @@ public class MongoStore extends StoreBase {
 			}
 		}
 		return session;
+	}
+
+	private DBObject getMongoSession(String id) {
+		int waited = 0;
+		DBObject mongoSession;
+		BasicDBObject sessionQuery = sessionQuery(id);
+		if (sticky) {
+			String owningThread = null;
+			String threadName = Thread.currentThread().getName();
+			while (waited < maxWaitTime && (owningThread = sessionsInUse.get(id)) != null
+					&& !owningThread.equals(threadName)) {
+				info("Session %s is still used by thread %s, waiting %sms.", id, owningThread, waitTime);
+				waited = doWait(waited);
+			}
+			mongoSession = this.collection.findOne(sessionQuery);
+		} else {
+			mongoSession = this.collection.findOne(sessionQuery);
+			while (waited < maxWaitTime && mongoSession.get(HOST_PROPERTY) != null) {
+				info("Session %s is still used by host %s, waiting %sms.", id, mongoSession.get(HOST_PROPERTY),
+						waitTime);
+				waited = doWait(waited);
+				mongoSession = this.collection.findOne(sessionQuery);
+			}
+		}
+		return mongoSession;
+	}
+
+	private int doWait(int waited) {
+		try {
+			Thread.sleep(waitTime);
+		} catch (InterruptedException e) {
+			// ignore
+		}
+		return waited + (int) waitTime;
+	}
+
+	public void setSticky(String sticky) {
+		this.sticky = "true".equalsIgnoreCase(sticky);
+	}
+
+	public void setHostName(String hostName) {
+		this.hostName = hostName;
 	}
 
 	private BasicDBObject sessionQuery(String id) {
@@ -463,6 +510,13 @@ public class MongoStore extends StoreBase {
 		super.startInternal();
 		if (this.collection == null) {
 			this.getConnection();
+		}
+		if (null == hostName) {
+			try {
+				this.hostName = InetAddress.getLocalHost().getHostName();
+			} catch (UnknownHostException e) {
+				throw new LifecycleException(e);
+			}
 		}
 	}
 
