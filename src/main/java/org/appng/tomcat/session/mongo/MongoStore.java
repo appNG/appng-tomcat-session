@@ -61,6 +61,9 @@ import com.mongodb.WriteResult;
  */
 public class MongoStore extends StoreBase {
 
+	/** Name of the Tomcat Thread that cleans up sessions in the background */
+	private static final String TOMCAT_SESSION_THREAD = "ContainerBackgroundProcessor";
+
 	/** The currently active session for this thread */
 	protected ThreadLocal<Session> currentSession = new ThreadLocal<>();
 
@@ -329,7 +332,7 @@ public class MongoStore extends StoreBase {
 						session.readObjectData(ois);
 						session.setManager(this.manager);
 
-						if (!sticky) {
+						if (!(sticky || TOMCAT_SESSION_THREAD.equals(threadName))) {
 							BasicDBObject setHost = new BasicDBObject("$set", new BasicDBObject(HOST_PROPERTY,
 									String.format("%s@%s", Thread.currentThread().getName(), hostName)));
 							this.collection.update(sessionQuery, setHost);
@@ -352,16 +355,19 @@ public class MongoStore extends StoreBase {
 	}
 
 	private DBObject getMongoSession(String id) {
+
 		int waited = 0;
 		DBObject mongoSession;
 		BasicDBObject sessionQuery = sessionQuery(id);
 		if (sticky) {
 			String owningThread = null;
 			String threadName = Thread.currentThread().getName();
-			while (waited < maxWaitTime && (owningThread = sessionsInUse.get(id)) != null
-					&& !owningThread.equals(threadName)) {
-				info("Session %s is still used by thread %s, waiting %sms.", id, owningThread, waitTime);
-				waited = doWait(waited);
+			if (!TOMCAT_SESSION_THREAD.equals(threadName)) {
+				while (waited < maxWaitTime && (owningThread = sessionsInUse.get(id)) != null
+						&& !owningThread.equals(threadName)) {
+					info("Session %s is still used by thread %s, waiting %sms.", id, owningThread, waitTime);
+					waited = doWait(waited);
+				}
 			}
 			mongoSession = this.collection.findOne(sessionQuery);
 		} else {
