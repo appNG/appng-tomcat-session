@@ -366,6 +366,9 @@ public class MongoStore extends StoreBase {
 			mongoSession = this.collection.findOne(sessionQuery);
 		} else {
 			mongoSession = this.collection.findOne(sessionQuery);
+			if (null == mongoSession) {
+				return null;
+			}
 			while (waited < maxWaitTime && mongoSession.get(HOST_PROPERTY) != null) {
 				info("Session %s is still used by host %s, waiting %sms.", id, mongoSession.get(HOST_PROPERTY),
 						waitTime);
