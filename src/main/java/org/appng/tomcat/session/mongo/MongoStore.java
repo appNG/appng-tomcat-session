@@ -332,7 +332,7 @@ public class MongoStore extends StoreBase {
 						session.readObjectData(ois);
 						session.setManager(this.manager);
 
-						if (!(sticky || TOMCAT_SESSION_THREAD.equals(threadName))) {
+						if (!(sticky || threadName.startsWith(TOMCAT_SESSION_THREAD))) {
 							BasicDBObject setHost = new BasicDBObject("$set", new BasicDBObject(HOST_PROPERTY,
 									String.format("%s@%s", Thread.currentThread().getName(), hostName)));
 							this.collection.update(sessionQuery, setHost);
@@ -362,7 +362,7 @@ public class MongoStore extends StoreBase {
 		if (sticky) {
 			String owningThread = null;
 			String threadName = Thread.currentThread().getName();
-			if (!TOMCAT_SESSION_THREAD.equals(threadName)) {
+			if (!threadName.startsWith(TOMCAT_SESSION_THREAD)) {
 				while (waited < maxWaitTime && (owningThread = sessionsInUse.get(id)) != null
 						&& !owningThread.equals(threadName)) {
 					info("Session %s is still used by thread %s, waiting %sms.", id, owningThread, waitTime);
