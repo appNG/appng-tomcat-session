@@ -315,9 +315,10 @@ public class MongoStore extends StoreBase {
 			long start = System.currentTimeMillis();
 			DBObject mongoSession = getMongoSession(id);
 
+			String currentThread = Thread.currentThread().getName();
 			if (null == mongoSession) {
-				info("Session %s not found for thread %s (active session is %s), returning null!", id,
-						Thread.currentThread().getName(), currentSessionId.get());
+				info("Session %s not found for thread %s (active session is %s), returning null!", id, currentThread,
+						currentSessionId.get());
 			} else {
 				Container container = manager.getContext();
 				Context context = (Context) container;
@@ -332,7 +333,7 @@ public class MongoStore extends StoreBase {
 						session.readObjectData(ois);
 						session.setManager(this.manager);
 
-						if (!(sticky || threadName.startsWith(TOMCAT_SESSION_THREAD))) {
+						if (!(sticky || currentThread.startsWith(TOMCAT_SESSION_THREAD))) {
 							BasicDBObject setHost = new BasicDBObject("$set", new BasicDBObject(HOST_PROPERTY,
 									String.format("%s@%s", Thread.currentThread().getName(), hostName)));
 							this.collection.update(sessionQuery, setHost);
