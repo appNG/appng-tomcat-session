@@ -126,6 +126,11 @@ public final class MongoPersistentManager extends PersistentManagerBase {
 		return sessions.toArray(new Session[0]);
 	}
 
+	@Override
+	public void processPersistenceChecks() {
+		// nothing to do since we don't swap in/out sessions
+	}
+
 	protected synchronized void startInternal() throws LifecycleException {
 		log.info("[" + this.getName() + "]: Starting.");
 		super.startInternal();
