@@ -61,9 +61,6 @@ import com.mongodb.WriteResult;
  */
 public class MongoStore extends StoreBase {
 
-	/** Name of the Tomcat Thread that cleans up sessions in the background */
-	private static final String TOMCAT_SESSION_THREAD = "ContainerBackgroundProcessor";
-
 	/** The currently active session for this thread */
 	protected ThreadLocal<Session> currentSession = new ThreadLocal<>();
 
@@ -255,18 +252,14 @@ public class MongoStore extends StoreBase {
 	/**
 	 * {@inheritDoc}
 	 */
-	public String[] keys() throws IOException {
+	public String[] keys() {
 		List<String> keys = new ArrayList<String>();
-
-		BasicDBObject sessionKeyQuery = new BasicDBObject();
-		sessionKeyQuery.put(appContextProperty, this.getName());
-
+		BasicDBObject sessionKeyQuery = new BasicDBObject(appContextProperty, this.getName());
 		DBCursor mongoSessionKeys = this.collection.find(sessionKeyQuery, new BasicDBObject(idProperty, 1));
 		while (mongoSessionKeys.hasNext()) {
 			String id = mongoSessionKeys.next().get(idProperty).toString();
 			keys.add(id);
 		}
-
 		return keys.toArray(new String[keys.size()]);
 	}
 
@@ -297,6 +290,25 @@ public class MongoStore extends StoreBase {
 		}
 	}
 
+	StandardSession loadNoLock(String id) throws ClassNotFoundException, IOException {
+		StandardSession session = null;
+		DBObject mongoSession = this.collection.findOne(sessionQuery(id));
+		if (null == mongoSession) {
+			return session;
+		}
+		Context context = (Context) manager.getContext();
+		try (ObjectInputStream ois = Utils.getObjectInputStream(context.getLoader().getClassLoader(),
+				context.getServletContext(), (byte[]) mongoSession.get(sessionDataProperty))) {
+			session = (StandardSession) manager.createEmptySession();
+			session.readObjectData(ois);
+			session.setManager(manager);
+		} catch (ReflectiveOperationException roe) {
+			getLog().error(String.format("Error loading session: %s", id), roe);
+			throw roe;
+		}
+		return session;
+	}
+
 	/**
 	 * {@inheritDoc}
 	 */
@@ -322,18 +334,17 @@ public class MongoStore extends StoreBase {
 			} else {
 				Container container = manager.getContext();
 				Context context = (Context) container;
-				ClassLoader appContextLoader = context.getLoader().getClassLoader();
 
 				byte[] data = (byte[]) mongoSession.get(sessionDataProperty);
 				if (data != null) {
-					try (ObjectInputStream ois = Utils.getObjectInputStream(appContextLoader,
-							manager.getContext().getServletContext(), data)) {
+					try (ObjectInputStream ois = Utils.getObjectInputStream(context.getLoader().getClassLoader(),
+							context.getServletContext(), data)) {
 
 						session = (StandardSession) this.manager.createEmptySession();
 						session.readObjectData(ois);
 						session.setManager(this.manager);
 
-						if (!(sticky || currentThread.startsWith(TOMCAT_SESSION_THREAD))) {
+						if (!sticky) {
 							BasicDBObject setHost = new BasicDBObject("$set", new BasicDBObject(HOST_PROPERTY,
 									String.format("%s@%s", Thread.currentThread().getName(), hostName)));
 							this.collection.update(sessionQuery, setHost);
@@ -362,25 +373,21 @@ public class MongoStore extends StoreBase {
 		BasicDBObject sessionQuery = sessionQuery(id);
 		if (sticky) {
 			String owningThread = null;
-			String threadName = Thread.currentThread().getName();
-			if (!threadName.startsWith(TOMCAT_SESSION_THREAD)) {
-				while (waited < maxWaitTime && (owningThread = sessionsInUse.get(id)) != null
-						&& !owningThread.equals(threadName)) {
-					info("Session %s is still used by thread %s, waiting %sms.", id, owningThread, waitTime);
-					waited = doWait(waited);
-				}
+			while (waited < maxWaitTime && (owningThread = sessionsInUse.get(id)) != null
+					&& !owningThread.equals(Thread.currentThread().getName())) {
+				debug("Session %s is still used by thread %s, waiting %sms.", id, owningThread, waitTime);
+				waited = doWait(waited);
 			}
 			mongoSession = this.collection.findOne(sessionQuery);
 		} else {
 			mongoSession = this.collection.findOne(sessionQuery);
-			if (null == mongoSession) {
-				return null;
-			}
-			while (waited < maxWaitTime && mongoSession.get(HOST_PROPERTY) != null) {
-				info("Session %s is still used by host %s, waiting %sms.", id, mongoSession.get(HOST_PROPERTY),
-						waitTime);
-				waited = doWait(waited);
-				mongoSession = this.collection.findOne(sessionQuery);
+			if (null != mongoSession) {
+				while (waited < maxWaitTime && mongoSession.get(HOST_PROPERTY) != null) {
+					debug("Session %s is still used by host %s, waiting %sms.", id, mongoSession.get(HOST_PROPERTY),
+							waitTime);
+					waited = doWait(waited);
+					mongoSession = this.collection.findOne(sessionQuery);
+				}
 			}
 		}
 		return mongoSession;
@@ -411,6 +418,7 @@ public class MongoStore extends StoreBase {
 	 * {@inheritDoc}
 	 */
 	public void remove(String id) throws IOException {
+		setSessionInactive();
 		BasicDBObject sessionQuery = sessionQuery(id);
 		try {
 			this.collection.remove(sessionQuery);
@@ -628,10 +636,10 @@ public class MongoStore extends StoreBase {
 
 	void setSessionInactive() {
 		String id = currentSessionId.get();
-		debug("Removing session from thread %s: %s", Thread.currentThread().getName(), id);
 		currentSession.remove();
 		currentSessionId.remove();
 		if (id != null) {
+			debug("Removing session from thread %s: %s", Thread.currentThread().getName(), id);
 			sessionsInUse.remove(id);
 		}
 	}

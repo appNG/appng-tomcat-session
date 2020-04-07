@@ -16,11 +16,14 @@
 package org.appng.tomcat.session.mongo;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.Manager;
 import org.apache.catalina.Session;
 import org.apache.catalina.session.PersistentManagerBase;
+import org.apache.catalina.session.StandardSession;
 import org.apache.juli.logging.Log;
 import org.appng.tomcat.session.Utils;
 
@@ -109,12 +112,18 @@ public final class MongoPersistentManager extends PersistentManagerBase {
 
 	@Override
 	public Session[] findSessions() {
-		try {
-			return Utils.findSessions(this, getStore().keys(), log);
-		} catch (IOException e) {
-			log.error("error finding sessions!", e);
+		List<Session> sessions = new ArrayList<>();
+		for (String id : getStore().keys()) {
+			try {
+				StandardSession session = getStore().loadNoLock(id);
+				if (null != session) {
+					sessions.add(session);
+				}
+			} catch (ClassNotFoundException | IOException e) {
+				// ignore
+			}
 		}
-		return new Session[0];
+		return sessions.toArray(new Session[0]);
 	}
 
 	protected synchronized void startInternal() throws LifecycleException {
