@@ -39,7 +39,7 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.JedisSentinelPool;
 import redis.clients.jedis.Protocol;
-import redis.clients.util.Pool;
+import redis.clients.jedis.util.Pool;
 
 /**
  * A {@link Manager} that uses Redis to store its {@link Session}s

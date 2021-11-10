@@ -194,25 +194,25 @@
 		<dependency>
 			<groupId>org.apache.tomcat</groupId>
 			<artifactId>tomcat-catalina</artifactId>
-			<version>8.5.41</version>
+			<version>9.0.54</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.mongodb</groupId>
 			<artifactId>mongo-java-driver</artifactId>
-			<version>3.10.2</version>
+			<version>3.12.8</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>redis.clients</groupId>
 			<artifactId>jedis</artifactId>
-			<version>2.9.0</version>
+			<version>3.6.3</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-test</artifactId>
-			<version>4.3.9.RELEASE</version>
+			<version>4.3.20.RELEASE</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>
@@ -224,13 +224,13 @@
 		<dependency>
 			<groupId>org.appng</groupId>
 			<artifactId>appng-api</artifactId>
-			<version>1.18.0</version>
+			<version>1.22.1</version>
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
 			<groupId>com.hazelcast</groupId>
 			<artifactId>hazelcast</artifactId>
-			<version>4.0</version>
+			<version>4.2</version>
 		</dependency>
 	</dependencies>
 </project>
