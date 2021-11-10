@@ -42,42 +42,44 @@ import com.hazelcast.core.EntryEvent;
 import com.hazelcast.core.Hazelcast;
 import com.hazelcast.core.HazelcastInstance;
 import com.hazelcast.map.IMap;
-import com.hazelcast.map.listener.EntryEvictedListener;
+import com.hazelcast.map.listener.EntryExpiredListener;
 
 /**
  * A {@link Store} using Hazelcast's {@link IMap} to store sessions.
  * <p/>
  * Configuration parameters (defaults in brackets):
  * <ul>
- * <li>mapName (tomcat.sessions)<br/>
+ * <li>mapName ({@code tomcat.sessions})<br/>
  * The name of the map used to store the sessions.</li>
- * <li>mode (multicast)<br/>
- * The mode to use, one of multicast, tcp, client, standalone.</li>
- * <li>group (dev)<br/>
+ * <li>mode ({@code multicast})<br/>
+ * The mode to use, one of {@code multicast}, {@code tcp}, {@code  classpath}, {@code client}, {@code standalone}.</li>
+ * <li>group ({@code dev})<br/>
  * The Hazelcast group to use.</li>
- * <li>addresses (localhost:5701)<br/>
- * A comma separated list of server addresses to use, only applies to 'client' mode.</li>
- * <li>port (5701)<br/>
+ * <li>addresses ({@code localhost:5701})<br/>
+ * A comma separated list of server addresses to use, only applies to {@code client} mode.</li>
+ * <li>autoDetect ({@code false})<br/>
+ * Enable/disable auto-detection ({@code multicast} and {@code tcp} mode only).</li>
+ * <li>port ({@code 5701})<br/>
  * The Hazelcast port to use.</li>
- * <li>multicastGroup (224.2.2.3)<br/>
- * The multicast group, only applies to 'multicast' mode.</li>
- * <li>multicastPort (54327)<br/>
- * The multicast port, only applies to 'multicast' mode.</li>
- * <li>multicastTimeoutSeconds (2)<br/>
- * The multicast timeout, only applies to 'multicast' mode.</li>
- * <li>multicastTimeToLive (32)<br/>
- * The multicast ttl, only applies to 'multicast' mode.</li>
+ * <li>multicastGroup ({@code 224.2.2.3})<br/>
+ * The multicast group, only applies to {@code multicast} mode.</li>
+ * <li>multicastPort ({@code 54327})<br/>
+ * The multicast port, only applies to {@code multicast} mode.</li>
+ * <li>multicastTimeoutSeconds ({@code 2})<br/>
+ * The multicast timeout, only applies to {@code multicast} mode.</li>
+ * <li>multicastTimeToLive ({@code 32})<br/>
+ * The multicast ttl, only applies to {@code multicast} mode.</li>
  * <li>tcpMembers (<i>null</i>)<br/>
- * A comma separated list of members to connect to, only applies to 'tcp' mode.</li>
- * <li>clusterName (appNG)<br/>
+ * A comma separated list of members to connect to, only applies to {@code tcp} mode.</li>
+ * <li>clusterName ({@code appNG})<br/>
  * The Hazelcast cluster name.</li>
- * <li>instanceName (dev)<br/>
+ * <li>instanceName ({@code dev})<br/>
  * The Hazelcast instance name.</li>
  * </ul>
  * 
  * @author Matthias Müller
  */
-public class HazelcastStore extends StoreBase implements EntryEvictedListener<String, SessionData> {
+public class HazelcastStore extends StoreBase implements EntryExpiredListener<String, SessionData> {
 
 	private final Log log = Utils.getLog(HazelcastStore.class);
 	private HazelcastInstance instance;
@@ -97,6 +99,8 @@ public class HazelcastStore extends StoreBase implements EntryEvictedListener<St
 	private String clusterName = "appNG";
 	private String instanceName = "dev";
 	private String configFile = "hazelcast.xml";
+	private boolean lockOnSave = false;
+	private boolean autoDetect = false;
 
 	public enum Mode {
 		MULTICAST, TCP, CLIENT, STANDALONE, CLASSPATH;
@@ -160,7 +164,7 @@ public class HazelcastStore extends StoreBase implements EntryEvictedListener<St
 		getSessions().addEntryListener(this, true);
 	}
 
-	public void entryEvicted(EntryEvent<String, SessionData> event) {
+	public void entryExpired(EntryEvent<String, SessionData> event) {
 		SessionData oldValue = event.getOldValue();
 		String siteName = oldValue.getSite();
 
@@ -184,6 +188,7 @@ public class HazelcastStore extends StoreBase implements EntryEvictedListener<St
 		}
 		config.getNetworkConfig().getJoin().getTcpIpConfig().setEnabled(false);
 		config.getNetworkConfig().getJoin().getMulticastConfig().setEnabled(false);
+		config.getNetworkConfig().getJoin().getAutoDetectionConfig().setEnabled(autoDetect);
 		return config;
 	}
 
@@ -194,13 +199,24 @@ public class HazelcastStore extends StoreBase implements EntryEvictedListener<St
 	}
 
 	public void save(Session session) throws IOException {
+		if (lockOnSave) {
+			getSessions().lock(session.getId());
+		}
+
 		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
 			((StandardSession) session).writeObjectData(oos);
 			String site = Utils.getSiteName(session.getSession());
 			SessionData sessionData = new SessionData(session.getId(), site, bos.toByteArray());
+			session.setManager(getManager());
+			session.access();
+			session.endAccess();
 			getSessions().put(session.getId(), sessionData, session.getMaxInactiveInterval(), TimeUnit.SECONDS);
-			log.debug("saved: " + sessionData);
+			log.debug("saved: " + sessionData + " with TTL of " + session.getMaxInactiveInterval() + " seconds");
+		} finally {
+			if (lockOnSave) {
+				getSessions().unlock(session.getId());
+			}
 		}
 	}
 
@@ -209,11 +225,14 @@ public class HazelcastStore extends StoreBase implements EntryEvictedListener<St
 		return (HazelcastPersistentManager) super.getManager();
 	}
 
+	// see
+	// https://github.com/hazelcast/hazelcast-tomcat-sessionmanager/blob/v2.2/tomcat9/src/main/java/com/hazelcast/session/HazelcastSessionManager.java#L176-L224
 	public StandardSession load(String id) throws ClassNotFoundException, IOException {
 		StandardSession session = null;
+
+		// the calls are performed in a pessimistic lock block to prevent concurrency problems whilst finding sessions
+		getSessions().lock(id);
 		try {
-			// pessimistic lock block to prevent concurrency problems whilst finding sessions
-			getSessions().lock(id);
 			SessionData sessionData = getSessions().get(id);
 			if (null == sessionData) {
 				log.debug(String.format("Session %s not found in map %s", id, getMapNameInternal()));
@@ -257,7 +276,7 @@ public class HazelcastStore extends StoreBase implements EntryEvictedListener<St
 		return getManager().getName() + mapName;
 	}
 
-	// getters and setters
+	// setters
 	public void setMapName(String mapName) {
 		this.mapName = mapName;
 	}
@@ -308,12 +327,16 @@ public class HazelcastStore extends StoreBase implements EntryEvictedListener<St
 		this.managementCenterEnabled = managementCenterEnabled;
 	}
 
-	public String getConfigFile() {
-		return configFile;
-	}
-
 	public void setConfigFile(String configFile) {
 		this.configFile = configFile;
+	}
+
+	public void setAutoDetect(boolean autoDetect) {
+		this.autoDetect = autoDetect;
+	}
+
+	public void setLockOnSave(boolean lockOnSave) {
+		this.lockOnSave = lockOnSave;
 	}
 
 }
