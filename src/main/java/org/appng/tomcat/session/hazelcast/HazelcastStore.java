@@ -174,8 +174,8 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 			session.readObjectData(ois);
 			if (log.isDebugEnabled()) {
 				log.debug("expired: " + expired + " (accessed "
-						+ ((float) (System.currentTimeMillis() - session.getLastAccessedTime()) / 1000)
-						+ "ms ago, TTL: " + session.getMaxInactiveInterval() + "s)");
+						+ ((float) (System.currentTimeMillis() - session.getLastAccessedTime()) / 1000) + "s ago, TTL: "
+						+ session.getMaxInactiveInterval() + "s)");
 			}
 			session.expire(true);
 		} catch (IOException | ClassNotFoundException e) {
