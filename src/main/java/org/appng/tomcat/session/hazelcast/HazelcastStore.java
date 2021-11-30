@@ -165,13 +165,18 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 	}
 
 	public void entryExpired(EntryEvent<String, SessionData> event) {
-		SessionData oldValue = event.getOldValue();
-		String siteName = oldValue.getSite();
+		SessionData expired = event.getOldValue();
+		String siteName = expired.getSite();
 
-		try (ByteArrayInputStream in = new ByteArrayInputStream(oldValue.getData());
+		try (ByteArrayInputStream in = new ByteArrayInputStream(expired.getData());
 				ObjectInputStream ois = Utils.getObjectInputStream(in, siteName, getManager().getContext())) {
 			StandardSession session = new StandardSession(getManager());
 			session.readObjectData(ois);
+			if (log.isDebugEnabled()) {
+				log.debug("expired: " + expired + " (accessed "
+						+ ((float) (System.currentTimeMillis() - session.getLastAccessedTime()) / 1000)
+						+ "ms ago, TTL: " + session.getMaxInactiveInterval() + "s)");
+			}
 			session.expire(true);
 		} catch (IOException | ClassNotFoundException e) {
 			log.error("Error expiring session " + event.getKey(), e);
@@ -208,9 +213,6 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 			((StandardSession) session).writeObjectData(oos);
 			String site = Utils.getSiteName(session.getSession());
 			SessionData sessionData = new SessionData(session.getId(), site, bos.toByteArray());
-			session.setManager(getManager());
-			session.access();
-			session.endAccess();
 			getSessions().put(session.getId(), sessionData, session.getMaxInactiveInterval(), TimeUnit.SECONDS);
 			log.debug("saved: " + sessionData + " with TTL of " + session.getMaxInactiveInterval() + " seconds");
 		} finally {
@@ -240,8 +242,10 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 				try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
 						ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(),
 								manager.getContext())) {
-					session = (StandardSession) this.manager.createEmptySession();
+					session = getManager().createEmptySession();
 					session.readObjectData(ois);
+					session.access();
+					session.endAccess();
 					log.debug("loaded: " + sessionData);
 				}
 			}
@@ -253,7 +257,7 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 
 	public void remove(String id) throws IOException {
 		SessionData removed = getSessions().remove(id);
-		log.debug("removed: " + removed);
+		log.debug("removed: " + (null == removed ? id : removed));
 	}
 
 	public String[] keys() throws IOException {

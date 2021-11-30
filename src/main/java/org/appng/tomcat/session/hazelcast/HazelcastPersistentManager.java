@@ -19,6 +19,7 @@ import java.io.IOException;
 
 import org.apache.catalina.Session;
 import org.apache.catalina.session.PersistentManagerBase;
+import org.apache.catalina.session.StandardSession;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.appng.tomcat.session.Utils;
@@ -39,6 +40,11 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 	}
 
 	@Override
+	public StandardSession createEmptySession() {
+		return (StandardSession) super.createEmptySession();
+	}
+
+	@Override
 	public void add(Session session) {
 		// do nothing, we don't want to use Map<String,Session> sessions!
 	}
@@ -50,8 +56,8 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 	}
 
 	@Override
-	public Session createSession(String sessionId) {
-		Session session = super.createSession(sessionId);
+	public StandardSession createSession(String sessionId) {
+		StandardSession session = (StandardSession) super.createSession(sessionId);
 		try {
 			getStore().save(session);
 		} catch (IOException e) {

@@ -74,11 +74,13 @@ public class HazelStoreIT {
 		store.start();
 		manager.setStore(store);
 
-		StandardSession session = (StandardSession) manager.createSession("4711");
+		StandardSession session = manager.createSession("4711");
 		session.setMaxInactiveInterval(3/* seconds */);
 		session.setAttribute("foo", "test");
 
+		Assert.assertTrue(session.isNew());
 		store.save(session);
+		Assert.assertTrue(session.isNew());
 
 		TimeUnit.SECONDS.sleep(10);
 
