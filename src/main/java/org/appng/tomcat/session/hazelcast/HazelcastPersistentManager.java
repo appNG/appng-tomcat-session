@@ -19,9 +19,9 @@ import java.io.IOException;
 
 import org.apache.catalina.Session;
 import org.apache.catalina.session.PersistentManagerBase;
-import org.apache.catalina.session.StandardSession;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
+import org.appng.tomcat.session.DirtyFlagSession;
 import org.appng.tomcat.session.Utils;
 
 public class HazelcastPersistentManager extends PersistentManagerBase {
@@ -31,7 +31,12 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 
 	@Override
 	public void processExpires() {
-		// nothing to do here, we use a EntryEvictedListener!
+		// nothing to do here, we use an EntryExpiredListener!
+	}
+
+	@Override
+	public int getActiveSessions() {
+		return getStore().getSize();
 	}
 
 	@Override
@@ -40,8 +45,8 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 	}
 
 	@Override
-	public StandardSession createEmptySession() {
-		return (StandardSession) super.createEmptySession();
+	public DirtyFlagSession createEmptySession() {
+		return new DirtyFlagSession(this);
 	}
 
 	@Override
@@ -56,8 +61,8 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 	}
 
 	@Override
-	public StandardSession createSession(String sessionId) {
-		StandardSession session = (StandardSession) super.createSession(sessionId);
+	public DirtyFlagSession createSession(String sessionId) {
+		DirtyFlagSession session = (DirtyFlagSession) super.createSession(sessionId);
 		try {
 			getStore().save(session);
 		} catch (IOException e) {

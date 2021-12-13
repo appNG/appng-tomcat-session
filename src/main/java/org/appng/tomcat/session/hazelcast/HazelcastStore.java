@@ -27,6 +27,7 @@ import org.apache.catalina.Store;
 import org.apache.catalina.session.StandardSession;
 import org.apache.catalina.session.StoreBase;
 import org.apache.juli.logging.Log;
+import org.appng.tomcat.session.DirtyFlagSession;
 import org.appng.tomcat.session.SessionData;
 import org.appng.tomcat.session.Utils;
 
@@ -101,6 +102,7 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 	private String configFile = "hazelcast.xml";
 	private boolean lockOnSave = false;
 	private boolean autoDetect = false;
+	private boolean useDirtyMark = true;
 
 	public enum Mode {
 		MULTICAST, TCP, CLIENT, STANDALONE, CLASSPATH;
@@ -208,16 +210,18 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 			getSessions().lock(session.getId());
 		}
 
-		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
-				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
-			((StandardSession) session).writeObjectData(oos);
-			String site = Utils.getSiteName(session.getSession());
-			SessionData sessionData = new SessionData(session.getId(), site, bos.toByteArray());
-			getSessions().put(session.getId(), sessionData, session.getMaxInactiveInterval(), TimeUnit.SECONDS);
-			log.debug("saved: " + sessionData + " with TTL of " + session.getMaxInactiveInterval() + " seconds");
-		} finally {
-			if (lockOnSave) {
-				getSessions().unlock(session.getId());
+		if (!useDirtyMark || ((DirtyFlagSession) session).isDirty()) {
+			try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+					ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+				((DirtyFlagSession) session).writeObjectData(oos);
+				String site = Utils.getSiteName(session.getSession());
+				SessionData sessionData = new SessionData(session.getId(), site, bos.toByteArray());
+				getSessions().put(session.getId(), sessionData, session.getMaxInactiveInterval(), TimeUnit.SECONDS);
+				log.debug("saved: " + sessionData + " with TTL of " + session.getMaxInactiveInterval() + " seconds");
+			} finally {
+				if (lockOnSave) {
+					getSessions().unlock(session.getId());
+				}
 			}
 		}
 	}
@@ -264,7 +268,7 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 		return getSessions().keySet().toArray(new String[0]);
 	}
 
-	public int getSize() throws IOException {
+	public int getSize() {
 		return getSessions().size();
 	}
 
@@ -343,4 +347,7 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 		this.lockOnSave = lockOnSave;
 	}
 
+	public void setUseDirtyMark(boolean useDirtyMark) {
+		this.useDirtyMark = useDirtyMark;
+	}
 }

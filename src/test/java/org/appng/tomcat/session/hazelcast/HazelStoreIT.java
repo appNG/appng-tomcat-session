@@ -117,7 +117,7 @@ public class HazelStoreIT {
 		store.start();
 		manager.setStore(store);
 
-		StandardSession session = new StandardSession(manager);
+		StandardSession session = manager.createEmptySession();
 		session.setId("4711");
 		session.setNew(true);
 		session.setValid(true);
