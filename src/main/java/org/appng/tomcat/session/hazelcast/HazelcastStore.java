@@ -216,7 +216,7 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 				((DirtyFlagSession) session).writeObjectData(oos);
 				String site = Utils.getSiteName(session.getSession());
 				SessionData sessionData = new SessionData(session.getId(), site, bos.toByteArray());
-				getSessions().put(session.getId(), sessionData, session.getMaxInactiveInterval(), TimeUnit.SECONDS);
+				getSessions().set(session.getId(), sessionData, session.getMaxInactiveInterval(), TimeUnit.SECONDS);
 				log.debug("saved: " + sessionData + " with TTL of " + session.getMaxInactiveInterval() + " seconds");
 			} finally {
 				if (lockOnSave) {
