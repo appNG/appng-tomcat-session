@@ -27,7 +27,6 @@ import org.apache.catalina.Store;
 import org.apache.catalina.session.StandardSession;
 import org.apache.catalina.session.StoreBase;
 import org.apache.juli.logging.Log;
-import org.appng.tomcat.session.DirtyFlagSession;
 import org.appng.tomcat.session.SessionData;
 import org.appng.tomcat.session.Utils;
 
@@ -210,10 +209,11 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 			getSessions().lock(session.getId());
 		}
 
-		if (!useDirtyMark || ((DirtyFlagSession) session).isDirty()) {
+		if (!useDirtyMark || ((HazelCastSession) session).isDirty()) {
 			try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 					ObjectOutputStream oos = new ObjectOutputStream(bos)) {
-				((DirtyFlagSession) session).writeObjectData(oos);
+				((HazelCastSession) session).setClean();
+				((HazelCastSession) session).writeObjectData(oos);
 				String site = Utils.getSiteName(session.getSession());
 				SessionData sessionData = new SessionData(session.getId(), site, bos.toByteArray());
 				getSessions().set(session.getId(), sessionData, session.getMaxInactiveInterval(), TimeUnit.SECONDS);

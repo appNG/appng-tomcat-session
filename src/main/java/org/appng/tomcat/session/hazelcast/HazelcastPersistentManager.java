@@ -21,7 +21,6 @@ import org.apache.catalina.Session;
 import org.apache.catalina.session.PersistentManagerBase;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
-import org.appng.tomcat.session.DirtyFlagSession;
 import org.appng.tomcat.session.Utils;
 
 public class HazelcastPersistentManager extends PersistentManagerBase {
@@ -45,8 +44,8 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 	}
 
 	@Override
-	public DirtyFlagSession createEmptySession() {
-		return new DirtyFlagSession(this);
+	public HazelCastSession createEmptySession() {
+		return new HazelCastSession(this);
 	}
 
 	@Override
@@ -61,8 +60,8 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 	}
 
 	@Override
-	public DirtyFlagSession createSession(String sessionId) {
-		DirtyFlagSession session = (DirtyFlagSession) super.createSession(sessionId);
+	public HazelCastSession createSession(String sessionId) {
+		HazelCastSession session = (HazelCastSession) super.createSession(sessionId);
 		try {
 			getStore().save(session);
 		} catch (IOException e) {

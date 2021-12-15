@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.appng.tomcat.session;
+package org.appng.tomcat.session.hazelcast;
 
 import java.security.Principal;
 
@@ -23,12 +23,13 @@ import org.apache.catalina.Session;
 /**
  * A {@link Session} that can be flagged as dirty.
  */
-public class DirtyFlagSession extends org.apache.catalina.session.StandardSession {
+public class HazelCastSession extends org.apache.catalina.session.StandardSession {
 
+	private static String DIRTY_FLAG = "__changed__";
 	private static final long serialVersionUID = -5219705900405324572L;
-	protected transient boolean dirty;
+	protected transient boolean dirty = false;
 
-	public DirtyFlagSession(Manager manager) {
+	public HazelCastSession(Manager manager) {
 		super(manager);
 	}
 
@@ -62,6 +63,11 @@ public class DirtyFlagSession extends org.apache.catalina.session.StandardSessio
 
 	public boolean isDirty() {
 		return dirty;
+	}
+
+	public void setClean() {
+		getSession().removeAttribute(DIRTY_FLAG);
+		this.dirty = false;
 	}
 
 }
