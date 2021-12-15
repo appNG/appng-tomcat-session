@@ -25,6 +25,7 @@ import javax.servlet.http.HttpSessionEvent;
 import javax.servlet.http.HttpSessionListener;
 
 import org.apache.catalina.LifecycleException;
+import org.apache.catalina.Session;
 import org.apache.catalina.core.StandardContext;
 import org.apache.catalina.core.StandardEngine;
 import org.apache.catalina.core.StandardHost;
@@ -122,9 +123,17 @@ public class HazelStoreIT {
 		Assert.assertEquals(0, persistentSessions.size());
 
 		Assert.assertNull(manager.findSession(session.getId()));
-		Assert.assertEquals(numSessions / 2, manager.getActiveSessions());
+
+		int activeSessions = numSessions / 2;
+		Assert.assertEquals(activeSessions, manager.getActiveSessions());
 		Assert.assertEquals(numSessions, created.get());
-		Assert.assertEquals(numSessions / 2, destroyed.get());
+		Assert.assertEquals(activeSessions, destroyed.get());
+
+		for (Session s : manager.findSessions()) {
+			manager.commit(s);
+		}
+
+		Assert.assertEquals(activeSessions, persistentSessions.size());
 	}
 
 	@BeforeClass
