@@ -118,8 +118,16 @@ public class HazelcastManager extends ManagerBase {
 		log.debug(String.format("Added %s", session.getId()));
 	}
 
+	/**
+	 * Remove this Session from the active Sessions, but not from the distributed {@link IMap}.
+	 *
+	 * @param session
+	 *                Session to be removed
+	 */
 	void removeLocal(Session session) {
-		super.remove(session, true);
+		if (session.getIdInternal() != null) {
+			sessions.remove(session.getIdInternal());
+		}
 	}
 
 	@Override
@@ -129,12 +137,8 @@ public class HazelcastManager extends ManagerBase {
 		log.debug(String.format("Removed %s (update: %s)", session.getId(), update));
 	}
 
-	private IMap<String, SessionData> getPersistentSessions() {
+	IMap<String, SessionData> getPersistentSessions() {
 		return instance.getMap(mapName);
-	}
-
-	int getPersistentSize() {
-		return getPersistentSessions().size();
 	}
 
 	public void setConfigFile(String configFile) {

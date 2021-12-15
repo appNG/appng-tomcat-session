@@ -31,10 +31,13 @@ import org.apache.catalina.core.StandardHost;
 import org.apache.catalina.core.StandardService;
 import org.apache.catalina.loader.WebappLoader;
 import org.apache.catalina.util.StandardSessionIdGenerator;
+import org.appng.tomcat.session.SessionData;
 import org.appng.tomcat.session.hazelcast.HazelCastSession;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import com.hazelcast.map.IMap;
 
 public class HazelStoreIT {
 
@@ -105,17 +108,18 @@ public class HazelStoreIT {
 			}
 		}
 
+		IMap<String, SessionData> persistentSessions = manager.getPersistentSessions();
 		Assert.assertTrue(session.isNew());
-		Assert.assertEquals(0, manager.getPersistentSize());
+		Assert.assertEquals(0, persistentSessions.size());
 		Assert.assertEquals(numSessions, manager.getActiveSessions());
 		manager.commit(session);
-		Assert.assertEquals(1, manager.getPersistentSize());
+		Assert.assertEquals(1, persistentSessions.size());
 		Assert.assertEquals(numSessions, manager.getActiveSessions());
 		Assert.assertTrue(session.isNew());
 
 		TimeUnit.SECONDS.sleep(2);
 		manager.processExpires();
-		Assert.assertEquals(0, manager.getPersistentSize());
+		Assert.assertEquals(0, persistentSessions.size());
 
 		Assert.assertNull(manager.findSession(session.getId()));
 		Assert.assertEquals(numSessions / 2, manager.getActiveSessions());
