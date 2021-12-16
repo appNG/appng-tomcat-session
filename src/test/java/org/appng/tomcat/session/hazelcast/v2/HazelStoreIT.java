@@ -31,9 +31,11 @@ import org.apache.catalina.core.StandardEngine;
 import org.apache.catalina.core.StandardHost;
 import org.apache.catalina.core.StandardService;
 import org.apache.catalina.loader.WebappLoader;
+import org.apache.catalina.startup.Tomcat.FixContextListener;
 import org.apache.catalina.util.StandardSessionIdGenerator;
 import org.appng.tomcat.session.SessionData;
 import org.appng.tomcat.session.hazelcast.HazelCastSession;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -43,6 +45,7 @@ import com.hazelcast.map.IMap;
 public class HazelStoreIT {
 
 	static HazelcastManager manager;
+	static StandardContext context;
 
 	@Test
 	public void test() throws Exception {
@@ -138,7 +141,14 @@ public class HazelStoreIT {
 
 	@BeforeClass
 	public static void setup() throws LifecycleException {
-		StandardContext context = new StandardContext();
+		context = new StandardContext();
+
+		manager = new HazelcastManager();
+		manager.setSessionIdGenerator(new StandardSessionIdGenerator());
+		manager.setConfigFile("hazelcast-test.xml");
+		manager.setContext(context);
+		context.setManager(manager);
+
 		context.setName("foo");
 		WebappLoader loader = new WebappLoader() {
 			@Override
@@ -147,6 +157,7 @@ public class HazelStoreIT {
 			}
 		};
 		context.setLoader(loader);
+		context.setWorkDir(new java.io.File("target/tomcat").getAbsolutePath());
 		StandardHost host = new StandardHost();
 		StandardEngine engine = new StandardEngine();
 		engine.setService(new StandardService());
@@ -160,12 +171,17 @@ public class HazelStoreIT {
 		sites.put("appNG", new Site());
 		context.getServletContext().setAttribute("PLATFORM", platform);
 
-		manager = new HazelcastManager();
-		manager.setSessionIdGenerator(new StandardSessionIdGenerator());
-		manager.setConfigFile("hazelcast-test.xml");
-		manager.setContext(context);
-		manager.init();
+		context.setConfigured(true);
+		context.addLifecycleListener(new FixContextListener());
+		context.start();
+
 	}
+	
+	@AfterClass
+	public static void tearDown() throws LifecycleException {
+		context.stop();
+	}
+	
 
 	public static class Site {
 		static boolean calledClassloader = false;

@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.catalina.LifecycleException;
+import org.apache.catalina.LifecycleState;
 import org.apache.catalina.Session;
 import org.apache.catalina.session.ManagerBase;
 import org.apache.catalina.session.StandardSession;
@@ -30,6 +31,21 @@ public class HazelcastManager extends ManagerBase {
 	private HazelcastInstance instance;
 
 	@Override
+	protected void startInternal() throws LifecycleException {
+		super.startInternal();
+		ClasspathXmlConfig config = new ClasspathXmlConfig(configFile);
+		instance = Hazelcast.getOrCreateHazelcastInstance(config);
+		log.info(String.format("Loaded %s from %s", instance, configFile));
+		setState(LifecycleState.STARTING);
+	}
+
+	@Override
+	protected void stopInternal() throws LifecycleException {
+		super.stopInternal();
+		setState(LifecycleState.STOPPING);
+	}
+
+	@Override
 	public void processExpires() {
 		long timeNow = System.currentTimeMillis();
 		Session sessions[] = findSessions();
@@ -42,13 +58,6 @@ public class HazelcastManager extends ManagerBase {
 					duration));
 		}
 		processingTime += duration;
-	}
-
-	@Override
-	protected void initInternal() throws LifecycleException {
-		instance = Hazelcast.getOrCreateHazelcastInstance(new ClasspathXmlConfig(configFile));
-		log.info(String.format("Loaded %s from %s", instance, configFile));
-		log.info("Using classpath config:" + getClass().getClassLoader().getResource(configFile));
 	}
 
 	@Override
