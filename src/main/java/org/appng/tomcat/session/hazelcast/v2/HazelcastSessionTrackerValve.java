@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2020 the original author or authors.
+ * Copyright 2015-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,23 +43,21 @@ public class HazelcastSessionTrackerValve extends ValveBase {
 		try {
 			getNext().invoke(request, response);
 		} finally {
-			if (isRequestWithoutSession(request.getDecodedRequestURI())) {
+			Session session = request.getSessionInternal(false);
+			if (commitRequired(request.getDecodedRequestURI()) && null != session) {
 				long start = System.currentTimeMillis();
-				Session session = request.getSessionInternal(false);
-				if (null != session) {
-					HazelcastManager manager = (HazelcastManager) request.getContext().getManager();
-					boolean committed = manager.commit(session);
-					if (log.isDebugEnabled()) {
-						log.debug(String.format("handling session %s for %s took %dms (committed: %s)", session.getId(),
-								request.getServletPath(), System.currentTimeMillis() - start, committed));
-					}
+				HazelcastManager manager = (HazelcastManager) request.getContext().getManager();
+				boolean committed = manager.commit(session);
+				if (log.isDebugEnabled()) {
+					log.debug(String.format("handling session %s for %s took %dms (committed: %s)", session.getId(),
+							request.getServletPath(), System.currentTimeMillis() - start, committed));
 				}
 			}
 		}
 	}
 
-	protected boolean isRequestWithoutSession(String uri) {
-		return filter != null && filter.matcher(uri).matches();
+	protected boolean commitRequired(String uri) {
+		return null == filter || !filter.matcher(uri).matches();
 	}
 
 	public String getFilter() {
