@@ -44,8 +44,8 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 	}
 
 	@Override
-	public HazelCastSession createEmptySession() {
-		return new HazelCastSession(this);
+	public HazelcastSession createEmptySession() {
+		return new HazelcastSession(this);
 	}
 
 	@Override
@@ -60,8 +60,8 @@ public class HazelcastPersistentManager extends PersistentManagerBase {
 	}
 
 	@Override
-	public HazelCastSession createSession(String sessionId) {
-		HazelCastSession session = (HazelCastSession) super.createSession(sessionId);
+	public HazelcastSession createSession(String sessionId) {
+		HazelcastSession session = (HazelcastSession) super.createSession(sessionId);
 		try {
 			getStore().save(session);
 		} catch (IOException e) {

@@ -1,10 +1,21 @@
+/*
+ * Copyright 2015-2021 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.appng.tomcat.session.hazelcast.v2;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -12,11 +23,10 @@ import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.Session;
 import org.apache.catalina.session.ManagerBase;
-import org.apache.catalina.session.StandardSession;
 import org.apache.juli.logging.Log;
 import org.appng.tomcat.session.SessionData;
 import org.appng.tomcat.session.Utils;
-import org.appng.tomcat.session.hazelcast.HazelCastSession;
+import org.appng.tomcat.session.hazelcast.HazelcastSession;
 
 import com.hazelcast.config.ClasspathXmlConfig;
 import com.hazelcast.core.Hazelcast;
@@ -61,37 +71,35 @@ public class HazelcastManager extends ManagerBase {
 	}
 
 	@Override
-	public HazelCastSession createEmptySession() {
-		return new HazelCastSession(this);
+	public HazelcastSession createEmptySession() {
+		return new HazelcastSession(this);
 	}
 
 	@Override
-	public HazelCastSession createSession(String sessionId) {
-		return (HazelCastSession) super.createSession(sessionId);
+	public HazelcastSession createSession(String sessionId) {
+		return (HazelcastSession) super.createSession(sessionId);
 	}
 
 	public boolean commit(Session session) throws IOException {
+		HazelcastSession hzSession = HazelcastSession.class.cast(session);
 		long start = System.currentTimeMillis();
-		if (((HazelCastSession) session).isDirty()) {
-			try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
-					ObjectOutputStream oos = new ObjectOutputStream(bos)) {
-				((HazelCastSession) session).setClean();
-				((HazelCastSession) session).writeObjectData(oos);
-				String site = Utils.getSiteName(session.getSession());
-				SessionData sessionData = new SessionData(session.getId(), site, bos.toByteArray());
-				getPersistentSessions().set(session.getId(), sessionData);
-				if (log.isDebugEnabled()) {
-					log.debug(String.format("Saved %s in %dms", sessionData, System.currentTimeMillis() - start));
-				}
-				return true;
+		SessionData currentSessionData = null;
+		if (hzSession.isDirty() || getPersistentSessions().get(session.getId())
+				.checksum() != (currentSessionData = hzSession.serialize()).checksum()) {
+			SessionData sessionData = null == currentSessionData ? hzSession.serialize() : currentSessionData;
+			getPersistentSessions().set(session.getId(), sessionData);
+			if (log.isDebugEnabled()) {
+				log.debug(String.format("Saved %s in %dms", sessionData, System.currentTimeMillis() - start));
 			}
+			return true;
+
 		}
 		return false;
 	}
 
 	@Override
-	public HazelCastSession findSession(String id) throws IOException {
-		HazelCastSession session = (HazelCastSession) super.findSession(id);
+	public HazelcastSession findSession(String id) throws IOException {
+		HazelcastSession session = (HazelcastSession) super.findSession(id);
 		if (null == session) {
 
 			long start = System.currentTimeMillis();
@@ -106,14 +114,8 @@ public class HazelcastManager extends ManagerBase {
 						log.debug(String.format("Session %s not found in map %s", id, mapName));
 					}
 				} else {
-					try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
-							ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(),
-									getContext())) {
-						session = createEmptySession();
-						((StandardSession) session).readObjectData(ois);
-						session.access();
-						session.endAccess();
-						session.setClean();
+					try {
+						session = HazelcastSession.create(this, sessionData);
 						if (log.isDebugEnabled()) {
 							log.debug(String.format("Loaded %s in %dms", sessionData,
 									System.currentTimeMillis() - start));

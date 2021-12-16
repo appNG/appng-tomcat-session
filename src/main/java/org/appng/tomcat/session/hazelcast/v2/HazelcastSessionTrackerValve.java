@@ -49,7 +49,7 @@ public class HazelcastSessionTrackerValve extends ValveBase {
 				HazelcastManager manager = (HazelcastManager) request.getContext().getManager();
 				boolean committed = manager.commit(session);
 				if (log.isDebugEnabled()) {
-					log.debug(String.format("handling session %s for %s took %dms (committed: %s)", session.getId(),
+					log.debug(String.format("Handling session %s for %s took %dms (committed: %s)", session.getId(),
 							request.getServletPath(), System.currentTimeMillis() - start, committed));
 				}
 			}

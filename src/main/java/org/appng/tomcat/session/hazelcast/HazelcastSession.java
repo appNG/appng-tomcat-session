@@ -15,21 +15,28 @@
  */
 package org.appng.tomcat.session.hazelcast;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.security.Principal;
 
 import org.apache.catalina.Manager;
 import org.apache.catalina.Session;
+import org.appng.tomcat.session.SessionData;
+import org.appng.tomcat.session.Utils;
 
 /**
  * A {@link Session} that can be flagged as dirty.
  */
-public class HazelCastSession extends org.apache.catalina.session.StandardSession {
+public class HazelcastSession extends org.apache.catalina.session.StandardSession {
 
 	private static String DIRTY_FLAG = "__changed__";
 	private static final long serialVersionUID = -5219705900405324572L;
 	protected transient boolean dirty = false;
 
-	public HazelCastSession(Manager manager) {
+	public HazelcastSession(Manager manager) {
 		super(manager);
 	}
 
@@ -66,8 +73,32 @@ public class HazelCastSession extends org.apache.catalina.session.StandardSessio
 	}
 
 	public void setClean() {
-		getSession().removeAttribute(DIRTY_FLAG);
+		removeAttribute(DIRTY_FLAG);
 		this.dirty = false;
+	}
+
+	public SessionData serialize() throws IOException {
+		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+			setClean();
+			writeObjectData(oos);
+			oos.flush();
+			bos.flush();
+			return new SessionData(getId(), Utils.getSiteName(this), bos.toByteArray());
+		}
+	}
+
+	public static HazelcastSession create(Manager manager, SessionData sessionData)
+			throws IOException, ClassNotFoundException {
+		try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
+				ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(), manager.getContext())) {
+			HazelcastSession session = (HazelcastSession) manager.createEmptySession();
+			session.readObjectData(ois);
+			session.access();
+			session.endAccess();
+			session.setClean();
+			return session;
+		}
 	}
 
 }

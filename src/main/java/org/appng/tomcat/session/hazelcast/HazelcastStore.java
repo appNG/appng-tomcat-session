@@ -16,10 +16,8 @@
 package org.appng.tomcat.session.hazelcast;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.catalina.Session;
@@ -209,13 +207,9 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 			getSessions().lock(session.getId());
 		}
 
-		if (!useDirtyMark || ((HazelCastSession) session).isDirty()) {
-			try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
-					ObjectOutputStream oos = new ObjectOutputStream(bos)) {
-				((HazelCastSession) session).setClean();
-				((HazelCastSession) session).writeObjectData(oos);
-				String site = Utils.getSiteName(session.getSession());
-				SessionData sessionData = new SessionData(session.getId(), site, bos.toByteArray());
+		if (!useDirtyMark || ((HazelcastSession) session).isDirty()) {
+			try {
+				SessionData sessionData = ((HazelcastSession) session).serialize();
 				getSessions().set(session.getId(), sessionData, session.getMaxInactiveInterval(), TimeUnit.SECONDS);
 				log.debug("saved: " + sessionData + " with TTL of " + session.getMaxInactiveInterval() + " seconds");
 			} finally {
@@ -243,14 +237,11 @@ public class HazelcastStore extends StoreBase implements EntryExpiredListener<St
 			if (null == sessionData) {
 				log.debug(String.format("Session %s not found in map %s", id, getMapNameInternal()));
 			} else {
-				try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
-						ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(),
-								manager.getContext())) {
-					session = getManager().createEmptySession();
-					session.readObjectData(ois);
-					session.access();
-					session.endAccess();
+				try {
+					session = HazelcastSession.create(getManager(), sessionData);
 					log.debug("loaded: " + sessionData);
+				} catch (ClassNotFoundException e) {
+					log.error("Error loading session" + id, e);
 				}
 			}
 		} finally {

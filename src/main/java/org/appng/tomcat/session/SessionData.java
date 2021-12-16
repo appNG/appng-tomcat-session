@@ -16,53 +16,44 @@
 package org.appng.tomcat.session;
 
 import java.io.Serializable;
+import java.util.Arrays;
 
 /**
  * Used to persist the binary representation of {@link org.apache.catalina.Session}.
  */
 public class SessionData implements Serializable {
 
-	private String id;
-	private String site;
-	private byte[] data;
-
-	public SessionData() {
-
-	}
+	private final String id;
+	private final String site;
+	private final byte[] data;
+	private final int checksum;
 
 	public SessionData(String id, String site, byte[] data) {
 		this.id = id;
 		this.site = site;
 		this.data = data;
+		this.checksum = Arrays.hashCode(data);
 	}
 
 	public String getSite() {
 		return site;
 	}
 
-	public void setSite(String site) {
-		this.site = site;
-	}
-
 	public byte[] getData() {
 		return data;
-	}
-
-	public void setData(byte[] data) {
-		this.data = data;
 	}
 
 	public String getId() {
 		return id;
 	}
 
-	public void setId(String id) {
-		this.id = id;
-	}
-
 	@Override
 	public String toString() {
-		return String.format("[%s] %s (%skb)", site, id, data.length / 1000);
+		return String.format("[%s] %s (%db, checksum: %d)", site, id, data.length, checksum);
+	}
+
+	public int checksum() {
+		return checksum;
 	}
 
 }

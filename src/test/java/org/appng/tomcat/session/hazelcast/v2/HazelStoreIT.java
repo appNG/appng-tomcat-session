@@ -34,7 +34,7 @@ import org.apache.catalina.loader.WebappLoader;
 import org.apache.catalina.startup.Tomcat.FixContextListener;
 import org.apache.catalina.util.StandardSessionIdGenerator;
 import org.appng.tomcat.session.SessionData;
-import org.appng.tomcat.session.hazelcast.HazelCastSession;
+import org.appng.tomcat.session.hazelcast.HazelcastSession;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -50,7 +50,7 @@ public class HazelStoreIT {
 	@Test
 	public void test() throws Exception {
 
-		HazelCastSession session = manager.createEmptySession();
+		HazelcastSession session = manager.createEmptySession();
 		session.setId("4711");
 		session.setNew(true);
 		session.setValid(true);
@@ -58,12 +58,23 @@ public class HazelStoreIT {
 
 		Assert.assertFalse(session.isDirty());
 		session.setAttribute("foo", "test");
+		HashMap<String, String> map = new HashMap<String, String>();
+		session.setAttribute("amap", map);
 		session.setAttribute("metaData", new MetaData());
 		Assert.assertTrue(session.isDirty());
-		manager.commit(session);
+		Assert.assertTrue(manager.commit(session));
 		Assert.assertFalse(session.isDirty());
+		Assert.assertFalse(manager.commit(session));
 
-		HazelCastSession loaded = manager.findSession(session.getId());
+		SessionData original = session.serialize();
+		int checksum = original.checksum();
+		map.put("foo", "test");
+		SessionData modified = session.serialize();
+		int newChecksum = modified.checksum();
+		Assert.assertNotEquals(checksum, newChecksum);
+		Assert.assertTrue(manager.commit(session));
+
+		HazelcastSession loaded = manager.findSession(session.getId());
 		Assert.assertEquals(session, loaded);
 
 		Assert.assertEquals(1, manager.getActiveSessions());
@@ -100,10 +111,10 @@ public class HazelStoreIT {
 			}
 		});
 
-		HazelCastSession session = null;
+		HazelcastSession session = null;
 		int numSessions = 10000;
 		for (int i = 0; i < numSessions; i++) {
-			HazelCastSession s = manager.createSession(null);
+			HazelcastSession s = manager.createSession(null);
 			s.setMaxInactiveInterval((i % 2 == 0 ? 1 : 3600));
 			s.setAttribute("foo", "test");
 			s.setAttribute("metaData", new MetaData());
@@ -176,12 +187,11 @@ public class HazelStoreIT {
 		context.start();
 
 	}
-	
+
 	@AfterClass
 	public static void tearDown() throws LifecycleException {
 		context.stop();
 	}
-	
 
 	public static class Site {
 		static boolean calledClassloader = false;
