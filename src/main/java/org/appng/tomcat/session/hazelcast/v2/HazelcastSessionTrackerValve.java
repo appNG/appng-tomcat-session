@@ -36,28 +36,24 @@ public class HazelcastSessionTrackerValve extends ValveBase {
 
 	private final Log log = Utils.getLog(HazelcastSessionTrackerValve.class);
 
-	protected Pattern filter = Pattern.compile("^/template/.*$");
+	protected Pattern filter = Pattern.compile("^(/template/.*)|((/health)(\\?.*)?)$");
 
 	@Override
 	public void invoke(Request request, Response response) throws IOException, ServletException {
-		if (isRequestWithoutSession(request.getDecodedRequestURI())) {
-			getNext().invoke(request, response);
-			return;
-		}
-
-		long start = System.currentTimeMillis();
 		try {
 			getNext().invoke(request, response);
 		} finally {
-			HazelcastManager manager = (HazelcastManager) request.getContext().getManager();
-			Session session = request.getSessionInternal(false);
-			if (session != null) {
-				manager.commit(session);
-			}
-			long duration = System.currentTimeMillis() - start;
-			if (log.isDebugEnabled() && duration > 0) {
-				log.debug(String.format("handling session %s for %s took %dms", session.getId(),
-						request.getServletPath(), duration));
+			if (isRequestWithoutSession(request.getDecodedRequestURI())) {
+				long start = System.currentTimeMillis();
+				Session session = request.getSessionInternal(false);
+				if (null != session) {
+					HazelcastManager manager = (HazelcastManager) request.getContext().getManager();
+					boolean committed = manager.commit(session);
+					if (log.isDebugEnabled()) {
+						log.debug(String.format("handling session %s for %s took %dms (committed: %s)", session.getId(),
+								request.getServletPath(), System.currentTimeMillis() - start, committed));
+					}
+				}
 			}
 		}
 	}

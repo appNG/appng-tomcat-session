@@ -70,7 +70,8 @@ public class HazelcastManager extends ManagerBase {
 		return (HazelCastSession) super.createSession(sessionId);
 	}
 
-	public void commit(Session session) throws IOException {
+	public boolean commit(Session session) throws IOException {
+		long start = System.currentTimeMillis();
 		if (((HazelCastSession) session).isDirty()) {
 			try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 					ObjectOutputStream oos = new ObjectOutputStream(bos)) {
@@ -79,9 +80,13 @@ public class HazelcastManager extends ManagerBase {
 				String site = Utils.getSiteName(session.getSession());
 				SessionData sessionData = new SessionData(session.getId(), site, bos.toByteArray());
 				getPersistentSessions().set(session.getId(), sessionData);
-				log.debug("saved: " + sessionData + " with TTL of " + session.getMaxInactiveInterval() + " seconds");
+				if (log.isDebugEnabled()) {
+					log.debug(String.format("Saved %s in %dms", sessionData, System.currentTimeMillis() - start));
+				}
+				return true;
 			}
 		}
+		return false;
 	}
 
 	@Override
@@ -89,13 +94,17 @@ public class HazelcastManager extends ManagerBase {
 		HazelCastSession session = (HazelCastSession) super.findSession(id);
 		if (null == session) {
 
+			long start = System.currentTimeMillis();
+
 			// the calls are performed in a pessimistic lock block to prevent concurrency problems whilst finding
 			// sessions
 			getPersistentSessions().lock(id);
 			try {
 				SessionData sessionData = getPersistentSessions().get(id);
 				if (null == sessionData) {
-					log.debug(String.format("Session %s not found in map %s", id, mapName));
+					if (log.isDebugEnabled()) {
+						log.debug(String.format("Session %s not found in map %s", id, mapName));
+					}
 				} else {
 					try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
 							ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(),
@@ -105,7 +114,10 @@ public class HazelcastManager extends ManagerBase {
 						session.access();
 						session.endAccess();
 						session.setClean();
-						log.debug("loaded: " + sessionData);
+						if (log.isDebugEnabled()) {
+							log.debug(String.format("Loaded %s in %dms", sessionData,
+									System.currentTimeMillis() - start));
+						}
 						add(session);
 					} catch (ClassNotFoundException e) {
 						log.error("Error loading session" + id, e);
