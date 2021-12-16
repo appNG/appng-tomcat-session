@@ -80,7 +80,11 @@ public class HazelcastManager extends ManagerBase {
 		return (HazelcastSession) super.createSession(sessionId);
 	}
 
-	public boolean commit(Session session) throws IOException {
+	boolean commit(Session session) throws IOException {
+		return commit(session, null);
+	}
+
+	boolean commit(Session session, String alternativeSiteName) throws IOException {
 		HazelcastSession hzSession = HazelcastSession.class.cast(session);
 		long start = System.currentTimeMillis();
 		SessionData currentSessionData = null;

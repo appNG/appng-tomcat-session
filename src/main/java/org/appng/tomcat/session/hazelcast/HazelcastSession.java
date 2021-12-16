@@ -78,13 +78,18 @@ public class HazelcastSession extends org.apache.catalina.session.StandardSessio
 	}
 
 	public SessionData serialize() throws IOException {
+		return serialize(null);
+	}
+
+	public SessionData serialize(String alternativeSiteName) throws IOException {
 		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
 			setClean();
 			writeObjectData(oos);
 			oos.flush();
 			bos.flush();
-			return new SessionData(getId(), Utils.getSiteName(this), bos.toByteArray());
+			String siteName = null == alternativeSiteName ? Utils.getSiteName(this) : alternativeSiteName;
+			return new SessionData(getId(), siteName, bos.toByteArray());
 		}
 	}
 
