@@ -17,6 +17,7 @@ package org.appng.tomcat.session.hazelcast.v2;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.catalina.LifecycleException;
@@ -35,6 +36,7 @@ import com.hazelcast.map.IMap;
 
 public class HazelcastManager extends ManagerBase {
 
+	private static final double NANOS_TO_MILLIS = 1000000d;
 	private final Log log = Utils.getLog(HazelcastManager.class);
 	private String configFile = "WEB-INF/classes/hazelcast.xml";
 	private String mapName = "tomcat.sessions";
@@ -86,17 +88,21 @@ public class HazelcastManager extends ManagerBase {
 
 	boolean commit(Session session, String alternativeSiteName) throws IOException {
 		HazelcastSession hzSession = HazelcastSession.class.cast(session);
-		long start = System.currentTimeMillis();
-		SessionData currentSessionData = null;
-		if (hzSession.isDirty() || getPersistentSessions().get(session.getId())
-				.checksum() != (currentSessionData = hzSession.serialize(alternativeSiteName)).checksum()) {
-			SessionData sessionData = null == currentSessionData ? hzSession.serialize() : currentSessionData;
+		long start = System.nanoTime();
+		int oldChecksum = -1;
+		boolean sessionDirty = false;
+		if ((sessionDirty = hzSession.isDirty())
+				|| (oldChecksum = getPersistentSessions().get(session.getId()).checksum()) != hzSession.checksum()) {
+			SessionData sessionData = hzSession.serialize(alternativeSiteName);
 			getPersistentSessions().set(session.getId(), sessionData);
 			if (log.isDebugEnabled()) {
-				log.debug(String.format("Saved %s in %dms", sessionData, System.currentTimeMillis() - start));
+				String reason = sessionDirty ? "dirty-flag was set" : String.format("checksum <> %s", oldChecksum);
+				log.debug(String.format(Locale.ENGLISH, "Saved %s (%s) in %.2fms", sessionData, reason,
+						((System.nanoTime() - start)) / NANOS_TO_MILLIS));
 			}
 			return true;
-
+		} else if (log.isTraceEnabled()) {
+			log.trace(String.format("No changes in %s", session.getId()));
 		}
 		return false;
 	}
@@ -105,11 +111,9 @@ public class HazelcastManager extends ManagerBase {
 	public HazelcastSession findSession(String id) throws IOException {
 		HazelcastSession session = (HazelcastSession) super.findSession(id);
 		if (null == session) {
-
-			long start = System.currentTimeMillis();
-
-			// the calls are performed in a pessimistic lock block to prevent concurrency problems whilst finding
-			// sessions
+			long start = System.nanoTime();
+			// the calls are performed in a pessimistic lock block to prevent
+			// concurrency problems whilst finding sessions
 			getPersistentSessions().lock(id);
 			try {
 				SessionData sessionData = getPersistentSessions().get(id);
@@ -121,10 +125,9 @@ public class HazelcastManager extends ManagerBase {
 					try {
 						session = HazelcastSession.create(this, sessionData);
 						if (log.isDebugEnabled()) {
-							log.debug(String.format("Loaded %s in %dms", sessionData,
-									System.currentTimeMillis() - start));
+							log.debug(String.format(Locale.ENGLISH, "Loaded %s in %.2fms", sessionData,
+									((System.nanoTime() - start)) / NANOS_TO_MILLIS));
 						}
-						add(session);
 					} catch (ClassNotFoundException e) {
 						log.error("Error loading session" + id, e);
 					}
@@ -134,7 +137,6 @@ public class HazelcastManager extends ManagerBase {
 			}
 		} else {
 			session.access();
-			session.endAccess();
 		}
 		return session;
 	}

@@ -15,12 +15,17 @@
  */
 package org.appng.tomcat.session.hazelcast;
 
+import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.security.Principal;
+import java.util.Arrays;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.apache.catalina.Manager;
 import org.apache.catalina.Session;
@@ -34,7 +39,7 @@ public class HazelcastSession extends org.apache.catalina.session.StandardSessio
 
 	private static String DIRTY_FLAG = "__changed__";
 	private static final long serialVersionUID = -5219705900405324572L;
-	protected transient boolean dirty = false;
+	protected volatile transient boolean dirty = false;
 
 	public HazelcastSession(Manager manager) {
 		super(manager);
@@ -81,6 +86,25 @@ public class HazelcastSession extends org.apache.catalina.session.StandardSessio
 		return serialize(null);
 	}
 
+	public int checksum() throws IOException {
+		Map<String, Object> attributes = new HashMap<String, Object>();
+		for (Enumeration<String> enumerator = getAttributeNames(); enumerator.hasMoreElements();) {
+			String key = enumerator.nextElement();
+			if (!DIRTY_FLAG.equals(key)) {
+				attributes.put(key, getAttribute(key));
+			}
+		}
+
+		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
+				ObjectOutputStream oos = new ObjectOutputStream(new BufferedOutputStream(bos));) {
+			oos.writeUnshared(attributes);
+			oos.flush();
+			bos.flush();
+			int checksum = Arrays.hashCode(bos.toByteArray());
+			return checksum;
+		}
+	}
+
 	public SessionData serialize(String alternativeSiteName) throws IOException {
 		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
@@ -89,7 +113,7 @@ public class HazelcastSession extends org.apache.catalina.session.StandardSessio
 			oos.flush();
 			bos.flush();
 			String siteName = null == alternativeSiteName ? Utils.getSiteName(this) : alternativeSiteName;
-			return new SessionData(getId(), siteName, bos.toByteArray());
+			return new SessionData(getId(), siteName, bos.toByteArray(), checksum());
 		}
 	}
 
@@ -100,8 +124,8 @@ public class HazelcastSession extends org.apache.catalina.session.StandardSessio
 			HazelcastSession session = (HazelcastSession) manager.createEmptySession();
 			session.readObjectData(ois);
 			session.access();
-			session.endAccess();
 			session.setClean();
+			manager.add(session);
 			return session;
 		}
 	}

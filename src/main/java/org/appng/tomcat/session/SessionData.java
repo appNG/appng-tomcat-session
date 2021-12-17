@@ -16,7 +16,6 @@
 package org.appng.tomcat.session;
 
 import java.io.Serializable;
-import java.util.Arrays;
 
 /**
  * Used to persist the binary representation of {@link org.apache.catalina.Session}.
@@ -28,11 +27,11 @@ public class SessionData implements Serializable {
 	private final byte[] data;
 	private final int checksum;
 
-	public SessionData(String id, String site, byte[] data) {
+	public SessionData(String id, String site, byte[] data, int checksum) {
 		this.id = id;
 		this.site = site;
 		this.data = data;
-		this.checksum = Arrays.hashCode(data);
+		this.checksum = checksum;
 	}
 
 	public String getSite() {

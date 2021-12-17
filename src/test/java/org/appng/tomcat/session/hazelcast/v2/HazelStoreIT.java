@@ -56,26 +56,38 @@ public class HazelStoreIT {
 		session.setValid(true);
 		session.setCreationTime(System.currentTimeMillis());
 
+		int checkSum1 = session.checksum();
+
 		Assert.assertFalse(session.isDirty());
 		session.setAttribute("foo", "test");
 		HashMap<String, String> map = new HashMap<String, String>();
 		session.setAttribute("amap", map);
 		session.setAttribute("metaData", new MetaData());
+
+		int checkSum2 = session.checksum();
+		Assert.assertNotEquals(checkSum1, checkSum2);
+
 		Assert.assertTrue(session.isDirty());
 		Assert.assertTrue(manager.commit(session));
 		Assert.assertFalse(session.isDirty());
 		Assert.assertFalse(manager.commit(session));
 
 		SessionData original = session.serialize();
-		int checksum = original.checksum();
+		int checksum3 = original.checksum();
+
+		Assert.assertEquals(checkSum2, checksum3);
+
 		map.put("foo", "test");
 		SessionData modified = session.serialize();
-		int newChecksum = modified.checksum();
-		Assert.assertNotEquals(checksum, newChecksum);
+		int checksum4 = modified.checksum();
+		Assert.assertNotEquals(checksum3, checksum4);
 		Assert.assertTrue(manager.commit(session));
 
+		long accessedBefore = session.getThisAccessedTimeInternal();
 		HazelcastSession loaded = manager.findSession(session.getId());
 		Assert.assertEquals(session, loaded);
+		long accessedAfter = session.getThisAccessedTimeInternal();
+		Assert.assertNotEquals(accessedBefore, accessedAfter);
 
 		Assert.assertEquals(1, manager.getActiveSessions());
 		manager.removeLocal(session);
@@ -152,6 +164,7 @@ public class HazelStoreIT {
 
 	@BeforeClass
 	public static void setup() throws LifecycleException {
+
 		context = new StandardContext();
 
 		manager = new HazelcastManager();
