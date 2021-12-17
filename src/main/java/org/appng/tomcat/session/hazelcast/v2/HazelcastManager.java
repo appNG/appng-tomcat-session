@@ -89,7 +89,7 @@ public class HazelcastManager extends ManagerBase {
 		long start = System.currentTimeMillis();
 		SessionData currentSessionData = null;
 		if (hzSession.isDirty() || getPersistentSessions().get(session.getId())
-				.checksum() != (currentSessionData = hzSession.serialize()).checksum()) {
+				.checksum() != (currentSessionData = hzSession.serialize(alternativeSiteName)).checksum()) {
 			SessionData sessionData = null == currentSessionData ? hzSession.serialize() : currentSessionData;
 			getPersistentSessions().set(session.getId(), sessionData);
 			if (log.isDebugEnabled()) {
