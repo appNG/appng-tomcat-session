@@ -18,6 +18,8 @@ package org.appng.tomcat.session.hazelcast.v2;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -58,9 +60,10 @@ public class HazelStoreIT {
 
 		int checkSum1 = session.checksum();
 
+		Assert.assertTrue(session.isNew());
 		Assert.assertFalse(session.isDirty());
 		session.setAttribute("foo", "test");
-		HashMap<String, String> map = new HashMap<String, String>();
+		ConcurrentMap<String, Object> map = new ConcurrentHashMap<>();
 		session.setAttribute("amap", map);
 		session.setAttribute("metaData", new MetaData());
 
@@ -69,6 +72,7 @@ public class HazelStoreIT {
 
 		Assert.assertTrue(session.isDirty());
 		Assert.assertTrue(manager.commit(session));
+		Assert.assertFalse(session.isNew());
 		Assert.assertFalse(session.isDirty());
 		Assert.assertFalse(manager.commit(session));
 
@@ -135,6 +139,7 @@ public class HazelStoreIT {
 			}
 		}
 
+		Assert.assertTrue(session.isNew());
 		IMap<String, SessionData> persistentSessions = manager.getPersistentSessions();
 		Assert.assertTrue(session.isNew());
 		Assert.assertEquals(0, persistentSessions.size());
@@ -142,7 +147,7 @@ public class HazelStoreIT {
 		manager.commit(session);
 		Assert.assertEquals(1, persistentSessions.size());
 		Assert.assertEquals(numSessions, manager.getActiveSessions());
-		Assert.assertTrue(session.isNew());
+		Assert.assertFalse(session.isNew());
 
 		TimeUnit.SECONDS.sleep(2);
 		manager.processExpires();

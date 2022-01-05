@@ -88,6 +88,7 @@ public class HazelcastManager extends ManagerBase {
 
 	boolean commit(Session session, String alternativeSiteName) throws IOException {
 		HazelcastSession hzSession = HazelcastSession.class.cast(session);
+		hzSession.endAccess();
 		long start = System.nanoTime();
 		int oldChecksum = -1;
 		boolean sessionDirty = false;
