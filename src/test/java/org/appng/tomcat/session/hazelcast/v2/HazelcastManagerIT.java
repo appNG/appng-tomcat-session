@@ -44,7 +44,7 @@ import org.junit.Test;
 
 import com.hazelcast.map.IMap;
 
-public class HazelStoreIT {
+public class HazelcastManagerIT {
 
 	static HazelcastManager manager;
 	static StandardContext context;
