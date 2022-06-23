@@ -78,10 +78,11 @@ public class HazelcastManager extends ManagerBase {
 
 	@Override
 	public HazelcastSession createSession(String sessionId) {
+		HazelcastSession session = (HazelcastSession) super.createSession(sessionId);
 		if(log.isTraceEnabled()) {
-			log.trace(String.format("Created %s", sessionId));
+			log.trace(String.format("Created %s (isNew: %s)", session.getId(), session.isNew()));
 		}
-		return (HazelcastSession) super.createSession(sessionId);
+		return session;
 	}
 
 	boolean commit(Session session) throws IOException {
