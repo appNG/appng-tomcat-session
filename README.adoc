@@ -92,30 +92,12 @@ Add the following into your Tomcat `context.xml` (or the context block of the `s
 
 [source,xml]
 ----
-<Valve className="org.appng.tomcat.session.hazelcast.HazelcastSessionTrackerValve" />
-<Manager className="org.appng.tomcat.session.hazelcast.HazelcastPersistentManager">	
-
-	<!-- standard configuration, using multicast -->
-	<Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="multicast" port="5701" instanceName="dev" clusterName="appNG"
-		multicastGroup="224.2.2.3" multicastPort="54327" multicastTimeoutSeconds="2" multicastTimeToLive="32" />
-	<!-- optionally, for all modes except 'classpath':
-		managementCenterEnabled="true"
-	-->
-
-	<!-- uses a config file from the classpath -->
-	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="classpath" configFile="hazelcast.xml" /-->  
-	
-	<!-- uses tcp, allowing to use a comma separated list of addresses -->	
-	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="tcp" port="5701" instanceName="dev" clusterName="appNG"
-		tcpMembers="localhost:5701" /-->
-
-	<!-- client mode, allowing to use a comma separated list of addresses -->
-	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="client" instanceName="dev" clusterName="appNG"
-		addresses="localhost:5701" /-->
-	
-	<!-- standalone mode, for development purposes -->
-	<!-- Store className="org.appng.tomcat.session.hazelcast.HazelcastStore" mode="standalone" port="5701" instanceName="dev" clusterName="appNG" /-->
-</Manager>
+<?xml version='1.0' encoding='utf-8'?>
+<Context>
+	<Valve   className="org.appng.tomcat.session.hazelcast.v2.HazelcastSessionTrackerValve" />
+	<!-- configFile must use a path from classpath -->
+	<Manager className="org.appng.tomcat.session.hazelcast.v2.HazelcastManager" configFile="hazelcast.xml" />
+</Context>
 ----
 
 Copy the following files into the `TOMCAT_BASE/lib` directory:

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2021 the original author or authors.
+ * Copyright 2015-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.appng.tomcat.session.hazelcast.v2;
+package org.appng.tomcat.session.hazelcast;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -27,7 +27,6 @@ import org.apache.catalina.session.ManagerBase;
 import org.apache.juli.logging.Log;
 import org.appng.tomcat.session.SessionData;
 import org.appng.tomcat.session.Utils;
-import org.appng.tomcat.session.hazelcast.HazelcastSession;
 
 import com.hazelcast.config.ClasspathXmlConfig;
 import com.hazelcast.core.Hazelcast;
@@ -38,7 +37,7 @@ public class HazelcastManager extends ManagerBase {
 
 	private static final double NANOS_TO_MILLIS = 1000000d;
 	private final Log log = Utils.getLog(HazelcastManager.class);
-	private String configFile = "WEB-INF/classes/hazelcast.xml";
+	private String configFile = "hazelcast.xml";
 	private String mapName = "tomcat.sessions";
 	private HazelcastInstance instance;
 
