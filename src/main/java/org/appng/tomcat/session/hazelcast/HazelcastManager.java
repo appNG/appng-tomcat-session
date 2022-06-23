@@ -78,6 +78,9 @@ public class HazelcastManager extends ManagerBase {
 
 	@Override
 	public HazelcastSession createSession(String sessionId) {
+		if(log.isTraceEnabled()) {
+			log.trace(String.format("Created %s", sessionId));
+		}
 		return (HazelcastSession) super.createSession(sessionId);
 	}
 
@@ -144,7 +147,9 @@ public class HazelcastManager extends ManagerBase {
 	@Override
 	public void add(Session session) {
 		super.add(session);
-		log.debug(String.format("Added %s", session.getId()));
+		if (log.isTraceEnabled()) {
+			log.trace(String.format("Added %s", session.getId()));
+		}
 	}
 
 	/**
@@ -163,7 +168,9 @@ public class HazelcastManager extends ManagerBase {
 	public void remove(Session session, boolean update) {
 		super.remove(session, update);
 		getPersistentSessions().remove(session.getId());
-		log.debug(String.format("Removed %s (update: %s)", session.getId(), update));
+		if (log.isTraceEnabled()) {
+			log.trace(String.format("Removed %s (update: %s)", session.getId(), update));
+		}
 	}
 
 	IMap<String, SessionData> getPersistentSessions() {
