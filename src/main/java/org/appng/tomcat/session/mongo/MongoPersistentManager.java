@@ -66,6 +66,11 @@ public final class MongoPersistentManager extends PersistentManagerBase {
 	}
 
 	@Override
+	public void processExpires() {
+		getStore().processExpires();
+	}
+
+	@Override
 	public Session createSession(String sessionId) {
 		Session session = super.createSession(sessionId);
 		getStore().setSessionActive(session);

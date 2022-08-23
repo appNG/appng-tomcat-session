@@ -256,11 +256,8 @@ public class MongoStore extends StoreBase {
 		List<String> keys = new ArrayList<String>();
 		BasicDBObject sessionKeyQuery = new BasicDBObject(appContextProperty, this.getName());
 		DBCursor mongoSessionKeys = this.collection.find(sessionKeyQuery, new BasicDBObject(idProperty, 1));
-		while (mongoSessionKeys.hasNext()) {
-			String id = mongoSessionKeys.next().get(idProperty).toString();
-			keys.add(id);
-		}
-		return keys.toArray(new String[keys.size()]);
+		mongoSessionKeys.forEach(k -> keys.add(k.get(idProperty).toString()));
+		return keys.toArray(new String[0]);
 	}
 
 	@Override
@@ -268,12 +265,13 @@ public class MongoStore extends StoreBase {
 		if (useTTLIndex) {
 			debug("Session expiration is done by a TTL index");
 		} else {
-			int sessionTimeout = this.manager.getContext().getSessionTimeout();
-			Date olderThan = new Date(System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(sessionTimeout));
-			BasicDBObject expireQuery = new BasicDBObject(lastModifiedProperty, new BasicDBObject("$lte", olderThan));
-			DBCursor toExpire = this.collection.find(expireQuery);
-			debug("Found %s sessions to expire with query: %s (older than %s)", toExpire.size(), expireQuery,
-					olderThan);
+			long timeNow = System.currentTimeMillis();
+			if (log.isDebugEnabled()) {
+				log.debug("Start expire sessions " + getName() + " at " + timeNow + " sessioncount "
+						+ this.collection.count());
+			}
+			DBCursor toExpire = getSessionsToExpire();
+			int expireHere = 0;
 			while (toExpire.hasNext()) {
 				DBObject mongoSession = toExpire.next();
 				String id = (String) mongoSession.get(idProperty);
@@ -286,8 +284,23 @@ public class MongoStore extends StoreBase {
 				session.endAccess();
 				// notify session listeners
 				session.expire();
+				expireHere++;
+			}
+			long timeEnd = System.currentTimeMillis();
+			if (log.isDebugEnabled()) {
+				log.debug("End expire sessions " + getName() + " processingTime " + (timeEnd - timeNow)
+						+ " expired sessions: " + expireHere);
 			}
 		}
+	}
+
+	protected DBCursor getSessionsToExpire() {
+		int sessionTimeout = this.manager.getContext().getSessionTimeout();
+		Date olderThan = new Date(System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(sessionTimeout));
+		BasicDBObject expireQuery = new BasicDBObject(lastModifiedProperty, new BasicDBObject("$lte", olderThan));
+		DBCursor toExpire = this.collection.find(expireQuery);
+		debug("Found %s sessions to expire with query: %s (older than %s)", toExpire.size(), expireQuery, olderThan);
+		return toExpire;
 	}
 
 	StandardSession loadNoLock(String id) throws ClassNotFoundException, IOException {
@@ -474,7 +487,7 @@ public class MongoStore extends StoreBase {
 		}
 	}
 
-	private void debug(String message, Object... args) {
+	protected void debug(String message, Object... args) {
 		if (getLog().isDebugEnabled()) {
 			getLog().debug(String.format(message, args));
 		}
