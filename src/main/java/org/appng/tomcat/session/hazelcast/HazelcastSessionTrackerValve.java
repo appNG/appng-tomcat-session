@@ -15,73 +15,15 @@
  */
 package org.appng.tomcat.session.hazelcast;
 
-import java.io.IOException;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
-
-import javax.servlet.ServletException;
-
 import org.apache.catalina.Session;
 import org.apache.catalina.Valve;
-import org.apache.catalina.connector.Request;
-import org.apache.catalina.connector.Response;
-import org.apache.catalina.valves.ValveBase;
-import org.apache.juli.logging.Log;
-import org.appng.tomcat.session.Utils;
+import org.appng.tomcat.session.SessionTrackerValve;
 
 /**
- * A {@link Valve} that uses {@link HazelcastManager} to store a {@link Session}
+ * A {@link Valve} that uses {@link HazelcastSessionManager} to store a {@link Session}
+ * 
+ * @deprecated use {@link SessionTrackerValve} instead.
  */
-public class HazelcastSessionTrackerValve extends ValveBase {
-
-	private final Log log = Utils.getLog(HazelcastSessionTrackerValve.class);
-	protected Pattern filter = Pattern.compile("^(/template/.*)|((/health)(\\?.*)?)$");
-	protected String siteNameHeader = "x-appng-site";
-
-	@Override
-	public void invoke(Request request, Response response) throws IOException, ServletException {
-		try {
-			getNext().invoke(request, response);
-		} finally {
-			Session session = request.getSessionInternal(false);
-			if (commitRequired(request.getDecodedRequestURI()) && null != session) {
-				long start = System.currentTimeMillis();
-				HazelcastManager manager = (HazelcastManager) request.getContext().getManager();
-				boolean committed = manager.commit(session, request.getHeader(siteNameHeader));
-				if (log.isDebugEnabled()) {
-					log.debug(String.format("Handling session %s for %s took %dms (committed: %s)", session.getId(),
-							request.getServletPath(), System.currentTimeMillis() - start, committed));
-				}
-			}
-		}
-	}
-
-	protected boolean commitRequired(String uri) {
-		return null == filter || !filter.matcher(uri).matches();
-	}
-
-	public String getSiteNameHeader() {
-		return siteNameHeader;
-	}
-
-	public void setSiteNameHeader(String siteNameHeader) {
-		this.siteNameHeader = siteNameHeader;
-	}
-
-	public String getFilter() {
-		return null == filter ? null : filter.toString();
-	}
-
-	public void setFilter(String filter) {
-		if (filter == null || filter.length() == 0) {
-			this.filter = null;
-		} else {
-			try {
-				this.filter = Pattern.compile(filter);
-			} catch (PatternSyntaxException pse) {
-				log.error("ivalid pattern", pse);
-			}
-		}
-	}
-
+@Deprecated
+public class HazelcastSessionTrackerValve extends SessionTrackerValve {
 }

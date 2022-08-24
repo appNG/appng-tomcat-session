@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.appng.tomcat.session.hazelcast;
+package org.appng.tomcat.session;
 
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
@@ -28,20 +28,17 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.catalina.Manager;
-import org.apache.catalina.Session;
-import org.appng.tomcat.session.SessionData;
-import org.appng.tomcat.session.Utils;
 
 /**
  * A {@link Session} that can be flagged as dirty.
  */
-public class HazelcastSession extends org.apache.catalina.session.StandardSession {
+public class Session extends org.apache.catalina.session.StandardSession {
 
 	private static String DIRTY_FLAG = "__changed__";
 	private static final long serialVersionUID = -5219705900405324572L;
 	protected volatile transient boolean dirty = false;
 
-	public HazelcastSession(Manager manager) {
+	public Session(Manager manager) {
 		super(manager);
 	}
 
@@ -94,6 +91,7 @@ public class HazelcastSession extends org.apache.catalina.session.StandardSessio
 				attributes.put(key, getAttribute(key));
 			}
 		}
+		//attributes.put("lastAccess", getLastAccessedTimeInternal());
 
 		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 				ObjectOutputStream oos = new ObjectOutputStream(new BufferedOutputStream(bos));) {
@@ -117,11 +115,11 @@ public class HazelcastSession extends org.apache.catalina.session.StandardSessio
 		}
 	}
 
-	public static HazelcastSession create(Manager manager, SessionData sessionData)
+	public static Session create(Manager manager, SessionData sessionData)
 			throws IOException, ClassNotFoundException {
 		try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
 				ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(), manager.getContext())) {
-			HazelcastSession session = (HazelcastSession) manager.createEmptySession();
+			Session session = (Session) manager.createEmptySession();
 			session.readObjectData(ois);
 			session.access();
 			session.setClean();

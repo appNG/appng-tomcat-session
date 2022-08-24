@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.appng.tomcat.session.hazelcast;
+package org.appng.tomcat.session.mongo;
 
 import java.io.Serializable;
 import java.util.HashMap;
@@ -27,7 +27,6 @@ import javax.servlet.http.HttpSessionEvent;
 import javax.servlet.http.HttpSessionListener;
 
 import org.apache.catalina.LifecycleException;
-import org.apache.catalina.Session;
 import org.apache.catalina.core.StandardContext;
 import org.apache.catalina.core.StandardEngine;
 import org.apache.catalina.core.StandardHost;
@@ -35,23 +34,29 @@ import org.apache.catalina.core.StandardService;
 import org.apache.catalina.loader.WebappLoader;
 import org.apache.catalina.startup.Tomcat.FixContextListener;
 import org.apache.catalina.util.StandardSessionIdGenerator;
+import org.appng.tomcat.session.Session;
 import org.appng.tomcat.session.SessionData;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.testcontainers.containers.MongoDBContainer;
 
-import com.hazelcast.map.IMap;
+import com.mongodb.DBCollection;
 
-public class HazelcastManagerIT {
+/**
+ * Integration test for {@link MongoSessionManager}
+ */
+public class MongoSessionManagerIT {
 
-	static HazelcastManager manager;
+	static MongoSessionManager manager;
 	static StandardContext context;
+	static MongoDBContainer mongo;
 
 	@Test
 	public void test() throws Exception {
 
-		HazelcastSession session = manager.createEmptySession();
+		Session session = manager.createEmptySession();
 		session.setId("4711");
 		session.setNew(true);
 		session.setValid(true);
@@ -87,7 +92,7 @@ public class HazelcastManagerIT {
 		Assert.assertTrue(manager.commit(session));
 
 		long accessedBefore = session.getThisAccessedTimeInternal();
-		HazelcastSession loaded = manager.findSession(session.getId());
+		Session loaded = manager.findSession(session.getId());
 		Assert.assertEquals(session, loaded);
 		long accessedAfter = session.getThisAccessedTimeInternal();
 		Assert.assertNotEquals(accessedBefore, accessedAfter);
@@ -126,10 +131,10 @@ public class HazelcastManagerIT {
 			}
 		});
 
-		HazelcastSession session = null;
-		int numSessions = 10000;
+		Session session = null;
+		int numSessions = 50;
 		for (int i = 0; i < numSessions; i++) {
-			HazelcastSession s = manager.createSession(null);
+			Session s = manager.createSession(null);
 			s.setMaxInactiveInterval((i % 2 == 0 ? 1 : 3600));
 			s.setAttribute("foo", "test");
 			s.setAttribute("metaData", new MetaData());
@@ -139,42 +144,55 @@ public class HazelcastManagerIT {
 		}
 
 		Assert.assertTrue(session.isNew());
-		IMap<String, SessionData> persistentSessions = manager.getPersistentSessions();
+		DBCollection persistentSessions = manager.getPersistentSessions();
 		Assert.assertTrue(session.isNew());
-		Assert.assertEquals(0, persistentSessions.size());
+		Assert.assertEquals(0L, persistentSessions.count());
 		Assert.assertEquals(numSessions, manager.getActiveSessions());
 		manager.commit(session);
-		Assert.assertEquals(1, persistentSessions.size());
+		Assert.assertEquals(1L, persistentSessions.count());
 		Assert.assertEquals(numSessions, manager.getActiveSessions());
 		Assert.assertFalse(session.isNew());
 
 		TimeUnit.SECONDS.sleep(2);
 		manager.processExpires();
-		Assert.assertEquals(0, persistentSessions.size());
+		Assert.assertEquals(25L, manager.getExpiredSessions());
+		Assert.assertEquals(0L, persistentSessions.count());
 
 		Assert.assertNull(manager.findSession(session.getId()));
 
-		int activeSessions = numSessions / 2;
+		long activeSessions = numSessions / 2;
 		Assert.assertEquals(activeSessions, manager.getActiveSessions());
 		Assert.assertEquals(numSessions, created.get());
 		Assert.assertEquals(activeSessions, destroyed.get());
 
-		for (Session s : manager.findSessions()) {
-			manager.commit(s);
+		for (org.apache.catalina.Session s : manager.findSessions()) {
+			manager.commit((Session) s);
 		}
 
-		Assert.assertEquals(activeSessions, persistentSessions.size());
+		Assert.assertEquals(activeSessions, persistentSessions.count());
+	}
+
+	@AfterClass
+	public static void shutdown() {
+		mongo.stop();
+		mongo.close();
 	}
 
 	@BeforeClass
 	public static void setup() throws LifecycleException {
 
+		mongo = new MongoDBContainer("mongo:3.4.9");
+		mongo.start();
+		String connectionString = mongo.getConnectionString();
+		String hostAndPort = connectionString.substring(10);
+
 		context = new StandardContext();
 
-		manager = new HazelcastManager();
+		manager = new MongoSessionManager();
 		manager.setSessionIdGenerator(new StandardSessionIdGenerator());
-		manager.setConfigFile("hazelcast-test.xml");
 		manager.setContext(context);
+		manager.setConnectionUri(hostAndPort);
+
 		context.setManager(manager);
 
 		context.setName("foo");
