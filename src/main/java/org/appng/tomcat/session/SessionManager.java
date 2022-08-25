@@ -29,6 +29,8 @@ public abstract class SessionManager<T> extends ManagerBase {
 
 	private static final double NANOS_TO_MILLIS = 1000000d;
 
+	protected boolean alwaysStoreSession = false;
+
 	protected abstract void updateSession(String id, SessionData sessionData) throws IOException;
 
 	protected abstract SessionData findSessionInternal(String id) throws IOException;
@@ -38,6 +40,8 @@ public abstract class SessionManager<T> extends ManagerBase {
 	public abstract Log log();
 
 	protected abstract T getPersistentSessions();
+
+	//protected abstract int expireInternal();
 
 	@Override
 	protected void stopInternal() throws LifecycleException {
@@ -52,11 +56,15 @@ public abstract class SessionManager<T> extends ManagerBase {
 		AtomicInteger expireHere = new AtomicInteger(0);
 		Arrays.asList(sessions).stream().filter(s -> !(s == null || s.isValid()))
 				.forEach(s -> expireHere.getAndIncrement());
+
+//		int expiredInternal = expireInternal();
+//		int expired = expireHere.addAndGet(expiredInternal);
+
 		long duration = System.currentTimeMillis() - timeNow;
 		if (log().isDebugEnabled()) {
-			log().debug(String.format("Expired %d of %d sessions in %dms.", expireHere.intValue(), sessions.length,
-					duration));
+			log().debug(String.format("Expired %d of %d sessions in %dms.", expireHere.intValue(), sessions.length, duration));
 		}
+
 		processingTime += duration;
 	}
 
@@ -119,7 +127,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 		session.endAccess();
 		int oldChecksum = -1;
 		boolean sessionDirty = false;
-		if ((sessionDirty = sessionInternal.isDirty())
+		if (alwaysStoreSession || (sessionDirty = sessionInternal.isDirty())
 				|| (oldChecksum = findSessionInternal(session.getId()).checksum()) != sessionInternal.checksum()) {
 			SessionData sessionData = sessionInternal.serialize(alternativeSiteName);
 			updateSession(sessionInternal.getId(), sessionData);
@@ -160,6 +168,10 @@ public abstract class SessionManager<T> extends ManagerBase {
 		if (session.getIdInternal() != null) {
 			sessions.remove(session.getIdInternal());
 		}
+	}
+
+	public void setAlwaysStoreSession(boolean alwaysStoreSession) {
+		this.alwaysStoreSession = alwaysStoreSession;
 	}
 
 	@Override

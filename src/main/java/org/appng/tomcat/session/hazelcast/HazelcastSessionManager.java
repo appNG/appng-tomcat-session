@@ -21,24 +21,41 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 	private String configFile = "hazelcast.xml";
 	private String mapName = "tomcat.sessions";
 	private HazelcastInstance instance;
-	
+
 	@Override
 	public Log log() {
 		return log;
 	}
-	
+
 	@Override
 	protected void startInternal() throws LifecycleException {
 		super.startInternal();
 		ClasspathXmlConfig config = new ClasspathXmlConfig(configFile);
 		instance = Hazelcast.getOrCreateHazelcastInstance(config);
 		log.info(String.format("Loaded %s from %s", instance, configFile));
+		log.info(String.format("Always store session: %s", alwaysStoreSession));
 		setState(LifecycleState.STARTING);
 	}
 
 	@Override
 	protected void updateSession(String id, SessionData sessionData) {
 		getPersistentSessions().set(id, sessionData);
+	}
+
+	@Override
+	protected String generateSessionId() {
+		String result = null;
+		do {
+			if (result != null) {
+				// Not thread-safe but if one of multiple increments is lost
+				// that is not a big deal since the fact that there was any
+				// duplicate is a much bigger issue.
+				duplicates++;
+			}
+			result = sessionIdGenerator.generateSessionId();
+		} while (sessions.containsKey(result) || getPersistentSessions().containsKey(result));
+		log.debug(String.format("Generated session ID: %s", result));
+		return result;
 	}
 
 	@Override
@@ -72,6 +89,5 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 	public void setMapName(String mapName) {
 		this.mapName = mapName;
 	}
-	
 
 }
