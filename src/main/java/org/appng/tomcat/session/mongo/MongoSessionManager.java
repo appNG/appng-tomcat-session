@@ -276,7 +276,7 @@ public final class MongoSessionManager extends SessionManager<DBCollection> {
 		}
 	}
 	
-	@Override
+	//@Override
 	protected int expireInternal() {
 		return 0;
 	}
