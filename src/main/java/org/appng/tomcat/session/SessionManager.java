@@ -98,7 +98,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 					session = Session.create(this, sessionData);
 					if (log().isDebugEnabled()) {
 						log().debug(
-								String.format(Locale.ENGLISH, "Loaded %s in %.2fms", sessionData, getMillis(start)));
+								String.format(Locale.ENGLISH, "Loaded %s in %.2fms", sessionData, getDuration(start)));
 					}
 				} catch (ClassNotFoundException e) {
 					log().error("Error loading session" + id, e);
@@ -113,7 +113,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 		return session;
 	}
 
-	protected double getMillis(long nanoStart) {
+	protected double getDuration(long nanoStart) {
 		return ((System.nanoTime() - nanoStart)) / NANOS_TO_MILLIS;
 	}
 
@@ -134,7 +134,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 			if (log().isDebugEnabled()) {
 				String reason = sessionDirty ? "dirty-flag was set" : String.format("checksum <> %s", oldChecksum);
 				log().debug(String.format(Locale.ENGLISH, "Saved %s (%s) in %.2fms", sessionData, reason,
-						getMillis(start)));
+						getDuration(start)));
 			}
 			return true;
 		} else if (log().isDebugEnabled()) {

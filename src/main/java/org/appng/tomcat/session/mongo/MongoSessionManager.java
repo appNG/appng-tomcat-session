@@ -255,7 +255,7 @@ public final class MongoSessionManager extends SessionManager<DBCollection> {
 			WriteResult updated = this.collection.update(sessionQuery, mongoSession, true, false);
 			log.debug(String.format(Locale.ENGLISH,
 					"Saved session %s with query %s in %.2fms (lastModified %s) acknowledged: %s", sessionData.getId(),
-					sessionQuery, getMillis(start), mongoSession.getDate(PROP_LAST_MODIFIED),
+					sessionQuery, getDuration(start), mongoSession.getDate(PROP_LAST_MODIFIED),
 					updated.wasAcknowledged()));
 		} catch (MongoException | IOException e) {
 			log.warn(String.format("Error saving session: %s", sessionData.getId()));

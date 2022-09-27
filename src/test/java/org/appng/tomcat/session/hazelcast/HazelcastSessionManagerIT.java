@@ -15,7 +15,10 @@
  */
 package org.appng.tomcat.session.hazelcast;
 
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -165,6 +168,16 @@ public class HazelcastSessionManagerIT {
 		}
 
 		Assert.assertEquals(activeSessions, persistentSessions.size());
+
+		try (ByteArrayOutputStream out = new ByteArrayOutputStream();
+				ObjectOutputStream objectOutputStream = new ObjectOutputStream(out);) {
+			objectOutputStream.writeObject("thesite");
+			objectOutputStream.writeObject("clear it!");
+			manager.clearSessionsOnEvent = Arrays.asList("java.lang.String");
+			manager.getTopic().publish(out.toByteArray());
+		}
+		Thread.sleep(100);
+		Assert.assertEquals(0, manager.getActiveSessions());
 	}
 
 	@BeforeClass
