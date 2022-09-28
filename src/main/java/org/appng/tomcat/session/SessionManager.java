@@ -159,7 +159,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 	}
 
 	/**
-	 * Remove this Session from the active Sessions, but not from the {@link SessionPersister}
+	 * Remove this Session from the active Sessions, but not from the persistent sessions
 	 *
 	 * @param session
 	 *                Session to be removed
