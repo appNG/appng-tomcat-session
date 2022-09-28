@@ -84,9 +84,9 @@ public abstract class SessionManager<T> extends ManagerBase {
 
 	@Override
 	public final Session findSession(String id) throws IOException {
+		long start = System.nanoTime();
 		Session session = (Session) super.findSession(id);
 		if (null == session) {
-			long start = System.nanoTime();
 			SessionData sessionData = findSessionInternal(id);
 
 			if (null == sessionData) {
@@ -106,7 +106,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 			}
 		} else {
 			if (log().isDebugEnabled()) {
-				log().debug(String.format(Locale.ENGLISH, "Loaded %s form local store.", id));
+				log().debug(String.format(Locale.ENGLISH, "Loaded %s from local store in %.2fms.", id, getDuration(start)));
 			}
 			session.access();
 		}
