@@ -54,7 +54,7 @@ public class SessionTrackerValve extends ValveBase {
 					}
 				}
 				if (!manager.isSticky()) {
-					manager.remove(session);
+					manager.removeLocal(session);
 				}
 			}
 		}
