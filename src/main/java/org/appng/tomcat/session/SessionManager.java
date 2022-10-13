@@ -156,7 +156,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 	public void add(org.apache.catalina.Session session) {
 		super.add(session);
 		if (log().isTraceEnabled()) {
-			log().trace(String.format("%s has been added to local cache", session.getId()));
+			log().trace(String.format("%s has been added to local cache.", session.getId()));
 		}
 	}
 
