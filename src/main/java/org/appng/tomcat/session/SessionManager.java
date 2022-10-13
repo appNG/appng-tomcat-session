@@ -139,7 +139,9 @@ public abstract class SessionManager<T> extends ManagerBase {
 			updateSession(sessionInternal.getId(), sessionData);
 			saved = true;
 			if (log().isDebugEnabled()) {
-				String reason = sessionDirty ? "dirty-flag was set" : String.format("checksum <> %s", oldChecksum);
+				String reason = sticky
+						? (sessionDirty ? "dirty-flag was set" : String.format("checksum <> %s", oldChecksum))
+						: "sticky=false";
 				log().debug(String.format(Locale.ENGLISH, "Saved %s (%s) in %.2fms", sessionData, reason,
 						getDuration(start)));
 			}
@@ -154,7 +156,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 	public void add(org.apache.catalina.Session session) {
 		super.add(session);
 		if (log().isTraceEnabled()) {
-			log().trace(String.format("Added %s", session.getId()));
+			log().trace(String.format("%s has been added to local cache", session.getId()));
 		}
 	}
 
@@ -172,7 +174,12 @@ public abstract class SessionManager<T> extends ManagerBase {
 	 */
 	public void removeLocal(org.apache.catalina.Session session) {
 		if (session.getIdInternal() != null) {
-			sessions.remove(session.getIdInternal());
+			org.apache.catalina.Session removed = sessions.remove(session.getIdInternal());
+			if (log().isTraceEnabled()) {
+				String message = null == removed ? "%s was not locally cached."
+						: "%s has been removed from local cache.";
+				log().trace(String.format(message, session.getId()));
+			}
 		}
 	}
 
