@@ -88,7 +88,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 		long start = System.nanoTime();
 		// Support multiple threads accessing the same, locally cached session.
 		// Even if we're not sticky, this is OK, because SessionTrackerValve calls
-		// manager.removeLocal(session) in that case!
+		// manager.remove(session) in that case!
 		Session session = (Session) super.findSession(id);
 		if (null == session) {
 			SessionData sessionData = findSessionInternal(id);
@@ -139,7 +139,9 @@ public abstract class SessionManager<T> extends ManagerBase {
 			updateSession(sessionInternal.getId(), sessionData);
 			saved = true;
 			if (log().isDebugEnabled()) {
-				String reason = sessionDirty ? "dirty-flag was set" : String.format("checksum <> %s", oldChecksum);
+				String reason = sticky
+						? (sessionDirty ? "dirty-flag was set" : String.format("checksum <> %s", oldChecksum))
+						: "sticky=false";
 				log().debug(String.format(Locale.ENGLISH, "Saved %s (%s) in %.2fms", sessionData, reason,
 						getDuration(start)));
 			}
@@ -154,25 +156,17 @@ public abstract class SessionManager<T> extends ManagerBase {
 	public void add(org.apache.catalina.Session session) {
 		super.add(session);
 		if (log().isTraceEnabled()) {
-			log().trace(String.format("Added %s", session.getId()));
+			log().trace(String.format("Added %s to local cache.", session.getId()));
 		}
 	}
 
 	@Override
-	public void remove(org.apache.catalina.Session session, boolean update) {
-		super.remove(session, update);
-		removeInternal(session, update);
-	}
-
-	/**
-	 * Remove this Session from the active Sessions, but not from the persistent sessions
-	 *
-	 * @param session
-	 *                Session to be removed
-	 */
-	public void removeLocal(org.apache.catalina.Session session) {
+	public void remove(org.apache.catalina.Session session, boolean expire) {
 		if (session.getIdInternal() != null) {
-			sessions.remove(session.getIdInternal());
+			super.remove(session, expire);
+			if (log().isTraceEnabled()) {
+				log().trace(String.format("Removed %s from local cache (Expired: {}).", session.getId(), expire));
+			}
 		}
 	}
 
