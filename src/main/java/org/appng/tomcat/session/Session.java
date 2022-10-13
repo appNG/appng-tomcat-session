@@ -91,7 +91,6 @@ public class Session extends org.apache.catalina.session.StandardSession {
 				attributes.put(key, getAttribute(key));
 			}
 		}
-		//attributes.put("lastAccess", getLastAccessedTimeInternal());
 
 		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 				ObjectOutputStream oos = new ObjectOutputStream(new BufferedOutputStream(bos));) {
@@ -111,12 +110,12 @@ public class Session extends org.apache.catalina.session.StandardSession {
 			oos.flush();
 			bos.flush();
 			String siteName = null == alternativeSiteName ? Utils.getSiteName(this) : alternativeSiteName;
-			return new SessionData(getId(), siteName, bos.toByteArray(), checksum());
+			return new SessionData(getId(), siteName, bos.toByteArray(), getLastAccessedTimeInternal(),
+					getMaxInactiveInterval(), checksum());
 		}
 	}
 
-	public static Session create(Manager manager, SessionData sessionData)
-			throws IOException, ClassNotFoundException {
+	public static Session create(Manager manager, SessionData sessionData) throws IOException, ClassNotFoundException {
 		try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
 				ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(), manager.getContext())) {
 			Session session = (Session) manager.createEmptySession();

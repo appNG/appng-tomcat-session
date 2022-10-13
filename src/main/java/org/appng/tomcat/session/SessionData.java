@@ -16,6 +16,7 @@
 package org.appng.tomcat.session;
 
 import java.io.Serializable;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Used to persist the binary representation of {@link org.apache.catalina.Session}.
@@ -25,12 +26,16 @@ public class SessionData implements Serializable {
 	private final String id;
 	private final String site;
 	private final byte[] data;
+	private final long lastAccessed;
+	private final int maxInactiveInterval;
 	private final int checksum;
 
-	public SessionData(String id, String site, byte[] data, int checksum) {
+	public SessionData(String id, String site, byte[] data, long lastAccessed, int maxInactiveInterval, int checksum) {
 		this.id = id;
 		this.site = site;
 		this.data = data;
+		this.lastAccessed = lastAccessed;
+		this.maxInactiveInterval = maxInactiveInterval;
 		this.checksum = checksum;
 	}
 
@@ -46,6 +51,14 @@ public class SessionData implements Serializable {
 		return id;
 	}
 
+	public long getLastAccessed() {
+		return lastAccessed;
+	}
+
+	public int getMaxInactiveInterval() {
+		return maxInactiveInterval;
+	}
+
 	@Override
 	public String toString() {
 		return String.format("[%s] %s (%db, checksum: %d)", site, id, data.length, checksum);
@@ -53,6 +66,11 @@ public class SessionData implements Serializable {
 
 	public int checksum() {
 		return checksum;
+	}
+
+	public boolean shouldExpire() {
+		long timeIdle = (System.currentTimeMillis() - maxInactiveInterval) / 1000L;
+		return timeIdle >= maxInactiveInterval + TimeUnit.MINUTES.toSeconds(5);
 	}
 
 }

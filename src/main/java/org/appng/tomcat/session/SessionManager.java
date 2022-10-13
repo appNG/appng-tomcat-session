@@ -29,7 +29,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 
 	private static final double NANOS_TO_MILLIS = 1000000d;
 
-	protected boolean alwaysStoreSession = false;
+	protected boolean sticky = true;
 
 	protected abstract void updateSession(String id, SessionData sessionData) throws IOException;
 
@@ -41,7 +41,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 
 	protected abstract T getPersistentSessions();
 
-	//protected abstract int expireInternal();
+	// protected abstract int expireInternal();
 
 	@Override
 	protected void stopInternal() throws LifecycleException {
@@ -62,7 +62,8 @@ public abstract class SessionManager<T> extends ManagerBase {
 
 		long duration = System.currentTimeMillis() - timeNow;
 		if (log().isDebugEnabled()) {
-			log().debug(String.format("Expired %d of %d sessions in %dms.", expireHere.intValue(), sessions.length, duration));
+			log().debug(String.format("Expired %d of %d sessions in %dms.", expireHere.intValue(), sessions.length,
+					duration));
 		}
 
 		processingTime += duration;
@@ -83,8 +84,11 @@ public abstract class SessionManager<T> extends ManagerBase {
 	}
 
 	@Override
-	public final Session findSession(String id) throws IOException {
+	public Session findSession(String id) throws IOException {
 		long start = System.nanoTime();
+		// Support multiple threads accessing the same, locally cached session.
+		// Even if we're not sticky, this is OK, because SessionTrackerValve calls
+		// manager.removeLocal(session) in that case!
 		Session session = (Session) super.findSession(id);
 		if (null == session) {
 			SessionData sessionData = findSessionInternal(id);
@@ -106,7 +110,8 @@ public abstract class SessionManager<T> extends ManagerBase {
 			}
 		} else {
 			if (log().isDebugEnabled()) {
-				log().debug(String.format(Locale.ENGLISH, "Loaded %s from local store in %.2fms.", id, getDuration(start)));
+				log().debug(
+						String.format(Locale.ENGLISH, "Loaded %s from local store in %.2fms.", id, getDuration(start)));
 			}
 			session.access();
 		}
@@ -127,21 +132,22 @@ public abstract class SessionManager<T> extends ManagerBase {
 		session.endAccess();
 		int oldChecksum = -1;
 		boolean sessionDirty = false;
-		if (alwaysStoreSession || (sessionDirty = sessionInternal.isDirty())
+		boolean saved = false;
+		if (!sticky || (sessionDirty = sessionInternal.isDirty())
 				|| (oldChecksum = findSessionInternal(session.getId()).checksum()) != sessionInternal.checksum()) {
 			SessionData sessionData = sessionInternal.serialize(alternativeSiteName);
 			updateSession(sessionInternal.getId(), sessionData);
+			saved = true;
 			if (log().isDebugEnabled()) {
 				String reason = sessionDirty ? "dirty-flag was set" : String.format("checksum <> %s", oldChecksum);
 				log().debug(String.format(Locale.ENGLISH, "Saved %s (%s) in %.2fms", sessionData, reason,
 						getDuration(start)));
 			}
-			return true;
 		} else if (log().isDebugEnabled()) {
 			log().debug(
 					String.format("No changes in %s with checksum %s", session.getId(), sessionInternal.checksum()));
 		}
-		return false;
+		return saved;
 	}
 
 	@Override
@@ -164,14 +170,18 @@ public abstract class SessionManager<T> extends ManagerBase {
 	 * @param session
 	 *                Session to be removed
 	 */
-	public void removeLocal(Session session) {
+	public void removeLocal(org.apache.catalina.Session session) {
 		if (session.getIdInternal() != null) {
 			sessions.remove(session.getIdInternal());
 		}
 	}
 
-	public void setAlwaysStoreSession(boolean alwaysStoreSession) {
-		this.alwaysStoreSession = alwaysStoreSession;
+	public boolean isSticky() {
+		return sticky;
+	}
+
+	public void setSticky(boolean sticky) {
+		this.sticky = sticky;
 	}
 
 	@Override

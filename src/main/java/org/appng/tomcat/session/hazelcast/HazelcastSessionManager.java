@@ -48,7 +48,7 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 		UUID listenerUid = getTopic().addMessageListener((MessageListener) this);
 		log.info(String.format("Attached to topic %s with UUID %s", topicName, listenerUid));
 		log.info(String.format("Loaded %s from %s", instance, configFile));
-		log.info(String.format("Always store session: %s", alwaysStoreSession));
+		log.info(String.format("Sticky: %s", sticky));
 		setState(LifecycleState.STARTING);
 	}
 

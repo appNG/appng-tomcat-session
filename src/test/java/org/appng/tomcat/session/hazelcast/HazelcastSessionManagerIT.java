@@ -16,13 +16,12 @@
 package org.appng.tomcat.session.hazelcast;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -42,10 +41,13 @@ import org.appng.tomcat.session.SessionData;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import com.hazelcast.map.IMap;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class HazelcastSessionManagerIT {
 
 	static HazelcastSessionManager manager;
@@ -53,41 +55,16 @@ public class HazelcastSessionManagerIT {
 
 	@Test
 	public void test() throws Exception {
-
-		Session session = manager.createEmptySession();
-		session.setId("4711");
-		session.setNew(true);
-		session.setValid(true);
-		session.setCreationTime(System.currentTimeMillis());
-
+		Session session = createSession();
 		int checkSum1 = session.checksum();
-
-		Assert.assertTrue(session.isNew());
-		Assert.assertFalse(session.isDirty());
-		session.setAttribute("foo", "test");
-		ConcurrentMap<String, Object> map = new ConcurrentHashMap<>();
-		session.setAttribute("amap", map);
-		session.setAttribute("metaData", new MetaData());
-
-		int checkSum2 = session.checksum();
-		Assert.assertNotEquals(checkSum1, checkSum2);
-
-		Assert.assertTrue(session.isDirty());
-		Assert.assertTrue(manager.commit(session));
-		Assert.assertFalse(session.isNew());
-		Assert.assertFalse(session.isDirty());
-		Assert.assertFalse(manager.commit(session));
-
+		Map<String, Object> map = modifySession(session);
+		int checkSum2 = assertSessionChanged(session, checkSum1, false);
 		SessionData original = session.serialize();
 		int checksum3 = original.checksum();
-
 		Assert.assertEquals(checkSum2, checksum3);
+		// --- basic tests
 
-		map.put("foo", "test");
-		SessionData modified = session.serialize();
-		int checksum4 = modified.checksum();
-		Assert.assertNotEquals(checksum3, checksum4);
-		Assert.assertTrue(manager.commit(session));
+		modifySession(session, map);
 
 		long accessedBefore = session.getThisAccessedTimeInternal();
 		Session loaded = manager.findSession(session.getId());
@@ -108,7 +85,91 @@ public class HazelcastSessionManagerIT {
 		Assert.assertFalse(loaded.isDirty());
 		Assert.assertEquals("test", session.getAttribute("foo"));
 		session.setAttribute("he", "ho");
-		manager.commit(session);
+		Assert.assertNotNull(manager.getSession(session.getId()));
+		Assert.assertTrue(manager.commit(session));
+		Assert.assertNotNull(manager.getSession(session.getId()));
+
+		manager.remove(session);
+	}
+
+	public void modifySession(Session session, Map<String, Object> map) throws IOException {
+		int oldChecksum = session.checksum();
+		map.put("foo", "test");
+		SessionData modified = session.serialize();
+		int checksum = modified.checksum();
+		Assert.assertNotEquals(oldChecksum, checksum);
+		Assert.assertTrue(manager.commit(session));
+	}
+
+	private Session createSession() {
+		Session session = manager.createEmptySession();
+		session.setId("4711");
+		session.setNew(true);
+		session.setValid(true);
+		session.setCreationTime(System.currentTimeMillis());
+		Assert.assertTrue(session.isNew());
+		Assert.assertFalse(session.isDirty());
+		return session;
+	}
+
+	private Map<String, Object> modifySession(Session session) {
+		session.setAttribute("foo", "test");
+		Map<String, Object> map = new HashMap<>();
+		session.setAttribute("amap", map);
+		session.setAttribute("metaData", new MetaData());
+		return map;
+	}
+
+	private int assertSessionChanged(Session session, int oldCheckSum, boolean isCommitted) throws IOException {
+		int checksum = session.checksum();
+		Assert.assertNotEquals(oldCheckSum, checksum);
+		Assert.assertTrue(session.isDirty());
+		Assert.assertTrue(manager.commit(session));
+		Assert.assertFalse(session.isNew());
+		Assert.assertFalse(session.isDirty());
+		Assert.assertEquals(isCommitted, manager.commit(session));
+		return checksum;
+	}
+
+	@Test
+	public void testNonSticky() throws Exception {
+		Session session = createSession();
+		int checkSum1 = session.checksum();
+		Map<String, Object> map = modifySession(session);
+		int checkSum2 = assertSessionChanged(session, checkSum1, false);
+		SessionData original = session.serialize();
+		int checksum3 = original.checksum();
+		Assert.assertEquals(checkSum2, checksum3);
+		// ---------- same like normal test
+		manager.removeLocal(session);
+
+		modifySession(session, map);
+
+		long accessedBefore = session.getThisAccessedTimeInternal();
+		Session loaded = manager.findSession(session.getId());
+
+		Assert.assertNotEquals(session, loaded);
+		long accessedAfter = loaded.getThisAccessedTimeInternal();
+		Assert.assertNotEquals(accessedBefore, accessedAfter);
+
+		Assert.assertEquals(1, manager.getActiveSessions());
+		manager.removeLocal(session);
+		Assert.assertEquals(0, manager.getActiveSessions());
+
+		Assert.assertTrue(Site.calledClassloader);
+		loaded = manager.findSession(session.getId());
+		Assert.assertTrue(Site.calledClassloader);
+		Assert.assertEquals(1, manager.getActiveSessions());
+		Assert.assertNotEquals(session, loaded);
+
+		Assert.assertFalse(loaded.isDirty());
+		Assert.assertEquals("test", session.getAttribute("foo"));
+		session.setAttribute("he", "ho");
+		Assert.assertNotNull(manager.getSession(session.getId()));
+		Assert.assertTrue(manager.commit(session));
+		Assert.assertNotNull(manager.getSession(session.getId()));
+		manager.removeLocal(session);
+		Assert.assertNull(manager.getSession(session.getId()));
 
 		manager.remove(session);
 	}
