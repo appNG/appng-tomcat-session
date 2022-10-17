@@ -116,21 +116,35 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 		} else {
 			keys = getPersistentSessions().keySet();
 		}
+
+		if (log.isDebugEnabled()) {
+			log.debug(String.format("Performing expiration check for %s sessions.", keys.size()));
+		}
+
 		AtomicInteger count = new AtomicInteger(0);
 		keys.forEach(k -> {
-			SessionData sessionData = getPersistentSessions().get(k);
 			try {
-				Session session = Session.load(this, sessionData);
-				if (null == session) {
-					// session is not valid, so manager.remove(session, true) already has been called
-					// which in turn will remove the session from the local cache and also from the persistent store
-					count.incrementAndGet();
-					if (log.isTraceEnabled()) {
-						log.trace(String.format("%s has been removed by internal expiration", k, mapName));
+				SessionData sessionData = getPersistentSessions().get(k);
+				if (null == sessionData) {
+					if (log.isDebugEnabled()) {
+						log.debug(String.format("Session %s not found in persistent store.", k));
+					}
+					if (sticky) {
+						removeLocal(sessions.get(k));
+					}
+				} else {
+					Session session = Session.load(this, sessionData);
+					if (null == session) {
+						// session is not valid, so manager.remove(session, true) already has been called
+						// which in turn will remove the session from the local cache and also from the persistent store
+						count.incrementAndGet();
+						if (log.isTraceEnabled()) {
+							log.trace(String.format("%s has been removed by internal expiration", k, mapName));
+						}
 					}
 				}
-			} catch (Exception e) {
-				log.error("Error expiring session " + k, e);
+			} catch (Throwable t) {
+				log.error("Error expiring session " + k, t);
 			}
 		});
 		long timeEnd = System.currentTimeMillis();

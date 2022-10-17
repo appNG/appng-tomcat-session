@@ -227,7 +227,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 	 *                Session to be removed
 	 */
 	public void removeLocal(org.apache.catalina.Session session) {
-		if (session.getIdInternal() != null) {
+		if (null != session && session.getIdInternal() != null) {
 			org.apache.catalina.Session removed = sessions.remove(session.getIdInternal());
 			if (log().isTraceEnabled()) {
 				String message = null == removed ? "%s was not locally cached."
