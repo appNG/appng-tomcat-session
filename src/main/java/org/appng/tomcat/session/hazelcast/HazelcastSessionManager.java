@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -110,11 +111,11 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 	@Override
 	public void processExpires() {
 		long timeNow = System.currentTimeMillis();
-		Set<String> keys;
+		Set<String> keys = new HashSet<>();
 		if (sticky) {
-			keys = sessions.keySet();
+			keys.addAll(sessions.keySet());
 		} else {
-			keys = getPersistentSessions().keySet();
+			keys.addAll(getPersistentSessions().keySet());
 		}
 
 		if (log.isDebugEnabled()) {
@@ -150,8 +151,8 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 		long timeEnd = System.currentTimeMillis();
 		long duration = timeEnd - timeNow;
 		processingTime += duration;
-		if (log.isDebugEnabled()) {
-			log.debug(String.format("Expired %s of %s sessions in %sms", count, keys.size(), duration));
+		if (log.isInfoEnabled()) {
+			log.info(String.format("Expired %s of %s sessions in %sms", count, keys.size(), duration));
 		}
 	}
 

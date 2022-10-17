@@ -213,8 +213,9 @@ public abstract class SessionManager<T> extends ManagerBase {
 		removeInternal(session);
 		if (expired && log().isDebugEnabled()) {
 			String message = String.format(Locale.ENGLISH,
-					"%s has expired! Last accessed at %s, maxLifeTime: %ss, age: %s seconds", session.getId(),
-					new Date(session.getLastAccessedTimeInternal()), session.getMaxInactiveInterval(),
+					"%s has expired (created: %s, last accessed: %s, maxLifeTime: %ss, age: %ss)", session.getId(),
+					new Date(session.getCreationTimeInternal()), new Date(session.getLastAccessedTimeInternal()),
+					session.getMaxInactiveInterval(),
 					(System.currentTimeMillis() - session.getLastAccessedTimeInternal()) / 1000);
 			log().debug(message);
 		}
