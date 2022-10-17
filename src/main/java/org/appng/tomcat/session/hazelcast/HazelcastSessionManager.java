@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -109,10 +110,14 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 	@Override
 	public void processExpires() {
 		long timeNow = System.currentTimeMillis();
-		// sufficient to iterate over the local keyset here,
-		// since processExpires is called on every node
+		Set<String> keys;
+		if (sticky) {
+			keys = sessions.keySet();
+		} else {
+			keys = getPersistentSessions().keySet();
+		}
 		AtomicInteger count = new AtomicInteger(0);
-		getPersistentSessions().localKeySet().forEach(k -> {
+		keys.forEach(k -> {
 			SessionData sessionData = getPersistentSessions().get(k);
 			try {
 				Session session = Session.load(this, sessionData);
@@ -132,8 +137,7 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 		long duration = timeEnd - timeNow;
 		processingTime += duration;
 		if (log.isDebugEnabled()) {
-			log.debug(String.format("Expired %s of %s sessions in %sms", count, getPersistentSessions().size(),
-					duration));
+			log.debug(String.format("Expired %s of %s sessions in %sms", count, keys.size(), duration));
 		}
 	}
 
