@@ -51,6 +51,10 @@ public class SessionData implements Serializable {
 		return id;
 	}
 
+	/**
+	 * last accessed time in milliseconds
+	 * @return milliseconds since last access
+	 */
 	public long getLastAccessed() {
 		return lastAccessed;
 	}
@@ -68,9 +72,8 @@ public class SessionData implements Serializable {
 		return checksum;
 	}
 
-	public boolean shouldExpire() {
-		long timeIdle = (System.currentTimeMillis() - maxInactiveInterval) / 1000L;
-		return timeIdle >= maxInactiveInterval + TimeUnit.MINUTES.toSeconds(5);
+	public long secondsSinceAccessed() {
+		return (System.currentTimeMillis() - lastAccessed) / 1000;
 	}
 
 }

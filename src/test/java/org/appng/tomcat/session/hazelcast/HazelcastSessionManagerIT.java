@@ -54,6 +54,27 @@ public class HazelcastSessionManagerIT {
 	static StandardContext context;
 
 	@Test
+	public void testSessionExpired() throws Exception {
+		manager.setSessionSaveIntervalSeconds(2);
+		Session session = manager.createEmptySession();
+		session.setCreationTime(System.currentTimeMillis());
+		session.setMaxInactiveInterval(6);
+		session.setId("4711");
+		session.setNew(true);
+		session.setValid(true);
+		session.setAttribute("foo", "bar");
+		Assert.assertTrue(manager.commit(session));
+		Thread.sleep(3000);
+
+		Assert.assertTrue(manager.commit(session));
+		Thread.sleep(7000);
+
+		SessionData serialized = session.serialize("appng");
+		Session created = Session.load(manager, serialized);
+		Assert.assertNull(created);
+	}
+
+	@Test
 	public void test() throws Exception {
 		Session session = createSession();
 		int checkSum1 = session.checksum();
@@ -133,10 +154,11 @@ public class HazelcastSessionManagerIT {
 
 	@Test
 	public void testNonSticky() throws Exception {
+		manager.setSticky(false);
 		Session session = createSession();
 		int checkSum1 = session.checksum();
 		Map<String, Object> map = modifySession(session);
-		int checkSum2 = assertSessionChanged(session, checkSum1, false);
+		int checkSum2 = assertSessionChanged(session, checkSum1, true);
 		SessionData original = session.serialize();
 		int checksum3 = original.checksum();
 		Assert.assertEquals(checkSum2, checksum3);
@@ -199,23 +221,23 @@ public class HazelcastSessionManagerIT {
 			s.setAttribute("metaData", new MetaData());
 			if (0 == i) {
 				session = s;
+				Assert.assertTrue(session.isNew());
 			}
+			manager.commit(s);
 		}
 
-		Assert.assertTrue(session.isNew());
 		IMap<String, SessionData> persistentSessions = manager.getPersistentSessions();
-		Assert.assertTrue(session.isNew());
-		Assert.assertEquals(0, persistentSessions.size());
+		Assert.assertEquals(50, persistentSessions.size());
 		Assert.assertEquals(numSessions, manager.getActiveSessions());
 		manager.commit(session);
-		Assert.assertEquals(1, persistentSessions.size());
+		Assert.assertEquals(50, persistentSessions.size());
 		Assert.assertEquals(numSessions, manager.getActiveSessions());
 		Assert.assertFalse(session.isNew());
 
 		TimeUnit.SECONDS.sleep(2);
 		manager.processExpires();
 		Assert.assertEquals(25L, manager.getExpiredSessions());
-		Assert.assertEquals(0, persistentSessions.size());
+		Assert.assertEquals(25, persistentSessions.size());
 
 		Assert.assertNull(manager.findSession(session.getId()));
 
@@ -239,6 +261,7 @@ public class HazelcastSessionManagerIT {
 		}
 		Thread.sleep(100);
 		Assert.assertEquals(0, manager.getActiveSessions());
+
 	}
 
 	@BeforeClass

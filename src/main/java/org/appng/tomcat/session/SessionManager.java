@@ -16,57 +16,75 @@
 package org.appng.tomcat.session;
 
 import java.io.IOException;
-import java.util.Arrays;
+import java.util.Date;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
 import org.apache.catalina.session.ManagerBase;
 import org.apache.juli.logging.Log;
 
+/**
+ * Basic implementation of {@link ManagerBase} using a persistent storage.
+ * 
+ * @param <T>
+ *            the type of the persistent storage
+ */
 public abstract class SessionManager<T> extends ManagerBase {
 
 	private static final double NANOS_TO_MILLIS = 1000000d;
 
 	protected boolean sticky = true;
 
+	protected int sessionSaveIntervalSeconds = 10;
+
+	/**
+	 * Updates the session in the persistent storage.
+	 * 
+	 * @param id
+	 *                    the id of the session
+	 * @param sessionData
+	 *                    the session's {@link SessionData}
+	 * 
+	 * @throws IOException
+	 *                     if an error occurs while updating the session
+	 */
 	protected abstract void updateSession(String id, SessionData sessionData) throws IOException;
 
+	/**
+	 * Retrieves the {@link SessionData} from the persistent storage
+	 * 
+	 * @param id
+	 *           the id of the session
+	 * 
+	 * @return the {@link SessionData} of the session, or {@code null} if the session could not be found
+	 * 
+	 * @throws IOException
+	 *                     if an error occurs while retrieving the data
+	 */
 	protected abstract SessionData findSessionInternal(String id) throws IOException;
 
-	public abstract void removeInternal(org.apache.catalina.Session session, boolean update);
+	/**
+	 * Remove the session from the underlying persistent storage
+	 * 
+	 * @param session
+	 *                the session to remove
+	 */
+	public abstract void removeInternal(org.apache.catalina.Session session);
 
 	public abstract Log log();
 
+	/**
+	 * Returns the persistent storage.
+	 * 
+	 * @return the persistent storage
+	 */
 	protected abstract T getPersistentSessions();
-
-	// protected abstract int expireInternal();
 
 	@Override
 	protected void stopInternal() throws LifecycleException {
 		super.stopInternal();
 		setState(LifecycleState.STOPPING);
-	}
-
-	@Override
-	public void processExpires() {
-		long timeNow = System.currentTimeMillis();
-		org.apache.catalina.Session sessions[] = findSessions();
-		AtomicInteger expireHere = new AtomicInteger(0);
-		Arrays.asList(sessions).stream().filter(s -> !(s == null || s.isValid()))
-				.forEach(s -> expireHere.getAndIncrement());
-
-//		int expiredInternal = expireInternal();
-//		int expired = expireHere.addAndGet(expiredInternal);
-
-		long duration = System.currentTimeMillis() - timeNow;
-		if (log().isDebugEnabled()) {
-			log().debug(String.format("Expired %d of %d sessions in %dms.", expireHere.intValue(), sessions.length,
-					duration));
-		}
-
-		processingTime += duration;
 	}
 
 	@Override
@@ -99,10 +117,14 @@ public abstract class SessionManager<T> extends ManagerBase {
 				}
 			} else {
 				try {
-					session = Session.create(this, sessionData);
+					session = Session.load(this, sessionData);
 					if (log().isDebugEnabled()) {
-						log().debug(
-								String.format(Locale.ENGLISH, "Loaded %s in %.2fms", sessionData, getDuration(start)));
+						if (null == session) {
+							log().debug(String.format("Session %s found, but has expired!", id));
+						} else {
+							log().debug(String.format(Locale.ENGLISH, "Loaded %s in %.2fms", sessionData,
+									getDuration(start)));
+						}
 					}
 				} catch (ClassNotFoundException e) {
 					log().error("Error loading session" + id, e);
@@ -126,22 +148,47 @@ public abstract class SessionManager<T> extends ManagerBase {
 		return commit(session, null);
 	}
 
+	/**
+	 * If one of these condition matches, the session is persisted to the store:
+	 * <ul>
+	 * <li>Is this manager non-sticky?
+	 * <li>Is the session marked as dirty?
+	 * <li>Is the session's new checksum different from the old checksum?
+	 * <li>Is it more than {@code sessionSaveIntervalSeconds} seconds ago when the session was last accessed?
+	 * </ul>
+	 *
+	 * @param session
+	 * @param alternativeSiteName
+	 * 
+	 * @return
+	 * 
+	 * @throws IOException
+	 */
 	public final boolean commit(org.apache.catalina.Session session, String alternativeSiteName) throws IOException {
-		long start = System.nanoTime();
-		Session sessionInternal = Session.class.cast(session);
 		session.endAccess();
-		int oldChecksum = -1;
-		boolean sessionDirty = false;
 		boolean saved = false;
-		if (!sticky || (sessionDirty = sessionInternal.isDirty())
-				|| (oldChecksum = findSessionInternal(session.getId()).checksum()) != sessionInternal.checksum()) {
+		long start = System.nanoTime();
+
+		SessionData oldSessionData = null;
+		Session sessionInternal = Session.class.cast(session);
+		boolean sessionDirty = sessionInternal.isDirty();
+		int checksum = -1;
+		int oldChecksum = -1;
+		long secondsSinceAccess = 0;
+		if (!sticky || sessionDirty || (checksum = sessionInternal
+				.checksum()) != (oldChecksum = ((oldSessionData = findSessionInternal(session.getId())).checksum()))
+				|| (secondsSinceAccess = oldSessionData.secondsSinceAccessed()) > sessionSaveIntervalSeconds) {
 			SessionData sessionData = sessionInternal.serialize(alternativeSiteName);
 			updateSession(sessionInternal.getId(), sessionData);
 			saved = true;
 			if (log().isDebugEnabled()) {
 				String reason = sticky
-						? (sessionDirty ? "dirty-flag was set" : String.format("checksum <> %s", oldChecksum))
+						? (sessionDirty ? "dirty-flag was set"
+								: (secondsSinceAccess > sessionSaveIntervalSeconds
+										? "last accessed " + secondsSinceAccess + " seconds ago"
+										: String.format("checksum %s <> %s", oldChecksum, checksum)))
 						: "sticky=false";
+
 				log().debug(String.format(Locale.ENGLISH, "Saved %s (%s) in %.2fms", sessionData, reason,
 						getDuration(start)));
 			}
@@ -161,9 +208,16 @@ public abstract class SessionManager<T> extends ManagerBase {
 	}
 
 	@Override
-	public void remove(org.apache.catalina.Session session, boolean update) {
-		super.remove(session, update);
-		removeInternal(session, update);
+	public void remove(org.apache.catalina.Session session, boolean expired) {
+		super.remove(session, expired);
+		removeInternal(session);
+		if (expired && log().isDebugEnabled()) {
+			String message = String.format(Locale.ENGLISH,
+					"%s has expired! Last accessed at %s, maxLifeTime: %ss, age: %s seconds", session.getId(),
+					new Date(session.getLastAccessedTimeInternal()), session.getMaxInactiveInterval(),
+					(System.currentTimeMillis() - session.getLastAccessedTimeInternal()) / 1000);
+			log().debug(message);
+		}
 	}
 
 	/**
@@ -189,6 +243,10 @@ public abstract class SessionManager<T> extends ManagerBase {
 
 	public void setSticky(boolean sticky) {
 		this.sticky = sticky;
+	}
+
+	public void setSessionSaveIntervalSeconds(int sessionSaveIntervalSeconds) {
+		this.sessionSaveIntervalSeconds = sessionSaveIntervalSeconds;
 	}
 
 	@Override

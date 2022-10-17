@@ -264,7 +264,7 @@ public final class MongoSessionManager extends SessionManager<DBCollection> {
 	}
 
 	@Override
-	public void removeInternal(Session session, boolean update) {
+	public void removeInternal(Session session) {
 		String id = session.getId();
 		BasicDBObject sessionQuery = sessionQuery(id);
 		try {

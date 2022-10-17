@@ -115,16 +115,22 @@ public class Session extends org.apache.catalina.session.StandardSession {
 		}
 	}
 
-	public static Session create(Manager manager, SessionData sessionData) throws IOException, ClassNotFoundException {
+	public static Session load(Manager manager, SessionData sessionData)
+			throws IOException, ClassNotFoundException {
+		Session session = null;
 		try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
 				ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(), manager.getContext())) {
-			Session session = (Session) manager.createEmptySession();
-			session.readObjectData(ois);
-			session.access();
-			session.setClean();
-			manager.add(session);
-			return session;
+			Session loadedSession = (Session) manager.createEmptySession();
+			loadedSession.readObjectData(ois);
+			// isValid() calls manager.remove(session, true) in case the session expired
+			if (loadedSession.isValid()) {
+				session = loadedSession;
+				session.access();
+				session.setClean();
+				manager.add(session);
+			}
 		}
+		return session;
 	}
 
 }
