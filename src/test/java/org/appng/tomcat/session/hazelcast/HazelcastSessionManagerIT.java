@@ -254,7 +254,7 @@ public class HazelcastSessionManagerIT {
 
 		try (ByteArrayOutputStream out = new ByteArrayOutputStream();
 				ObjectOutputStream objectOutputStream = new ObjectOutputStream(out);) {
-			objectOutputStream.writeObject("thesite");
+			objectOutputStream.writeObject("appNG");
 			objectOutputStream.writeObject("clear it!");
 			manager.clearSessionsOnEvent = Arrays.asList("java.lang.String");
 			manager.getTopic().publish(out.toByteArray());

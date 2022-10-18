@@ -37,6 +37,7 @@ public class Session extends org.apache.catalina.session.StandardSession {
 	private static String DIRTY_FLAG = "__changed__";
 	private static final long serialVersionUID = -5219705900405324572L;
 	protected volatile transient boolean dirty = false;
+	private transient String site;
 
 	public Session(Manager manager) {
 		super(manager);
@@ -64,6 +65,10 @@ public class Session extends org.apache.catalina.session.StandardSession {
 	public void setMaxInactiveInterval(int interval) {
 		super.setMaxInactiveInterval(interval);
 		markDirty();
+	}
+
+	public String getSite() {
+		return site;
 	}
 
 	private void markDirty() {
@@ -109,14 +114,13 @@ public class Session extends org.apache.catalina.session.StandardSession {
 			writeObjectData(oos);
 			oos.flush();
 			bos.flush();
-			String siteName = null == alternativeSiteName ? Utils.getSiteName(this) : alternativeSiteName;
-			return new SessionData(getId(), siteName, bos.toByteArray(), getLastAccessedTimeInternal(),
+			site = null == alternativeSiteName ? Utils.getSiteName(this) : alternativeSiteName;
+			return new SessionData(getId(), site, bos.toByteArray(), getLastAccessedTimeInternal(),
 					getMaxInactiveInterval(), checksum());
 		}
 	}
 
-	public static Session load(Manager manager, SessionData sessionData)
-			throws IOException, ClassNotFoundException {
+	public static Session load(Manager manager, SessionData sessionData) throws IOException, ClassNotFoundException {
 		Session session = null;
 		try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
 				ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(), manager.getContext())) {
@@ -125,6 +129,7 @@ public class Session extends org.apache.catalina.session.StandardSession {
 			// isValid() calls manager.remove(session, true) in case the session expired
 			if (loadedSession.isValid()) {
 				session = loadedSession;
+				session.site = sessionData.getSite();
 				session.access();
 				session.setClean();
 				manager.add(session);

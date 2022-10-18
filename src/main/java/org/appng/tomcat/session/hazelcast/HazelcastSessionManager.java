@@ -57,21 +57,35 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 		@Override
 		public void onMessage(Message<byte[]> message) {
 			// clears the locally cached sessions when a SiteReloadEvent occurs
+			// this must be done to avoid classloader issues, since the site
+			// gets a new classloader when being reloaded
 			byte[] data = message.getMessageObject();
 			try {
 				ByteArrayInputStream bais = new ByteArrayInputStream(data);
 				ObjectInputStream ois = new ObjectInputStream(bais);
-				String siteName = (String) ois.readObject();
+				final String siteName = (String) ois.readObject();
 				bais.reset();
 				ObjectInputStream siteOis = Utils.getObjectInputStream(bais, siteName, getContext());
 				// org.appng.api.messaging.Serializer first writes the siteName, then the event itself
-				siteName = (String) siteOis.readObject();
+				siteOis.readObject();
 				Object event = siteOis.readObject();
 				String eventType = event.getClass().getName();
 				if (clearSessionsOnEvent.contains(eventType)) {
-					log.info(String.format("Received %s, clearing %s local sessions!", eventType, sessions.size()));
-					sessions.clear();
+					AtomicInteger count = new AtomicInteger();
+					// @formatter:off
+ 					new HashSet<>(sessions.values())
+						.parallelStream()
+						.filter(s -> ((Session) s).getSite().equals(siteName))
+						.forEach(s -> {
+							count.incrementAndGet();
+							sessions.remove(s.getId());
+						});
+ 					// @formatter:on
+					log.info(String.format("Received %s for site %s, clearing %s local sessions!", eventType, siteName,
+							count.get()));
 				}
+			} catch (ReflectiveOperationException c) {
+				log.warn("Error reading event", c);
 			} catch (Throwable t) {
 				log.error("Error reading event", t);
 			}
@@ -111,17 +125,10 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 	@Override
 	public void processExpires() {
 		long timeNow = System.currentTimeMillis();
-		Set<String> keys = new HashSet<>();
-		if (sticky) {
-			keys.addAll(sessions.keySet());
-		} else {
-			keys.addAll(getPersistentSessions().keySet());
-		}
-
+		Set<String> keys = new HashSet<>(getPersistentSessions().localKeySet());
 		if (log.isDebugEnabled()) {
 			log.debug(String.format("Performing expiration check for %s sessions.", keys.size()));
 		}
-
 		AtomicInteger count = new AtomicInteger(0);
 		keys.forEach(k -> {
 			try {
