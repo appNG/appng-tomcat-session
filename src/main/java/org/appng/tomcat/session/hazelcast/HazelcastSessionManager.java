@@ -81,13 +81,13 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 							sessions.remove(s.getId());
 						});
  					// @formatter:on
-					log.info(String.format("Received %s for site %s, clearing %s local sessions!", eventType, siteName,
-							count.get()));
+					log.info(String.format("Received %s for site %s from %s, cleared %s local sessions!", eventType,
+							siteName, message.getPublishingMember().getAddress(), count.get()));
 				}
 			} catch (ReflectiveOperationException c) {
-				log.warn("Error reading event", c);
+				log.warn(String.format("Reading event caused %s: %s", c.getClass().getName(), c.getMessage()));
 			} catch (Throwable t) {
-				log.error("Error reading event", t);
+				log.error("Error processing event", t);
 			}
 		}
 	}
