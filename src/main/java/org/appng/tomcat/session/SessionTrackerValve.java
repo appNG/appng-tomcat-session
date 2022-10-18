@@ -45,7 +45,8 @@ public class SessionTrackerValve extends ValveBase {
 			Session session = request.getSessionInternal(false);
 			if (null != session) {
 				SessionManager<?> manager = (SessionManager<?>) request.getContext().getManager();
-				if (commitRequired(request.getDecodedRequestURI())) {
+				boolean commitRequired = commitRequired(request.getDecodedRequestURI());
+				if (commitRequired) {
 					long start = System.currentTimeMillis();
 					boolean committed = manager.commit(session, request.getHeader(siteNameHeader));
 					if (log.isDebugEnabled()) {
@@ -53,7 +54,7 @@ public class SessionTrackerValve extends ValveBase {
 								request.getServletPath(), System.currentTimeMillis() - start, committed));
 					}
 				}
-				if (!manager.isSticky()) {
+				if (!(manager.isSticky() && commitRequired)) {
 					manager.removeLocal(session);
 				}
 			}

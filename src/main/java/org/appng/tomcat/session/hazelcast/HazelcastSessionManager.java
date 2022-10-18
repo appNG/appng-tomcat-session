@@ -59,6 +59,7 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 			// clears the locally cached sessions when a SiteReloadEvent occurs
 			// this must be done to avoid classloader issues, since the site
 			// gets a new classloader when being reloaded
+			long start = System.currentTimeMillis();
 			byte[] data = message.getMessageObject();
 			try {
 				ByteArrayInputStream bais = new ByteArrayInputStream(data);
@@ -81,13 +82,14 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 							sessions.remove(s.getId());
 						});
  					// @formatter:on
-					log.info(String.format("Received %s for site %s from %s, cleared %s local sessions!", eventType,
-							siteName, message.getPublishingMember().getAddress(), count.get()));
+					log.info(String.format("Received %s for site '%s' from %s, cleared %s local sessions in %sms!",
+							eventType, siteName, message.getPublishingMember().getAddress(), count.get(),
+							System.currentTimeMillis() - start));
 				}
 			} catch (ReflectiveOperationException c) {
-				log.warn(String.format("Reading event caused %s: %s", c.getClass().getName(), c.getMessage()));
+				log.debug(String.format("Reading event caused %s: %s", c.getClass().getName(), c.getMessage()));
 			} catch (Throwable t) {
-				log.error("Error processing event", t);
+				log.warn("Error processing event", t);
 			}
 		}
 	}
@@ -152,7 +154,7 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 					}
 				}
 			} catch (Throwable t) {
-				log.error("Error expiring session " + k, t);
+				log.error(String.format("Error expiring session %s", k), t);
 			}
 		});
 		long timeEnd = System.currentTimeMillis();
@@ -161,6 +163,7 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 		if (log.isInfoEnabled()) {
 			log.info(String.format("Expired %s of %s sessions in %sms", count, keys.size(), duration));
 		}
+		super.processExpires();
 	}
 
 	@Override
@@ -180,7 +183,9 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 			}
 			result = sessionIdGenerator.generateSessionId();
 		} while (sessions.containsKey(result) || getPersistentSessions().containsKey(result));
-		log.debug(String.format("Generated session ID: %s", result));
+		if (log.isTraceEnabled()) {
+			log.trace(String.format("Generated session ID: %s", result));
+		}
 		return result;
 	}
 

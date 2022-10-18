@@ -262,6 +262,8 @@ public class Utils {
 				} catch (ReflectiveOperationException e) {
 					// ignore
 				}
+			} else if (internalLog.isDebugEnabled()) {
+				internalLog.debug(String.format("Site '%s' not found in context!", siteName));
 			}
 		}
 		return context.getLoader().getClassLoader();
@@ -270,6 +272,9 @@ public class Utils {
 	public static ObjectInputStream getObjectInputStream(InputStream in, String siteName, Context context)
 			throws IOException {
 		final ClassLoader classLoader = getClassLoader(siteName, context);
+		if (internalLog.isDebugEnabled()) {
+			internalLog.debug(String.format("Using %s for site '%s'.", classLoader.getClass().getSimpleName(), siteName));
+		}
 		return new ObjectInputStream(in) {
 			protected Class<?> resolveClass(java.io.ObjectStreamClass desc) throws IOException, ClassNotFoundException {
 				return Class.forName(desc.getName(), false, classLoader);
