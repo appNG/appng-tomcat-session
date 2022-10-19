@@ -38,6 +38,7 @@ public class Session extends org.apache.catalina.session.StandardSession {
 	private static final long serialVersionUID = -5219705900405324572L;
 	protected volatile transient boolean dirty = false;
 	private transient String site;
+	private transient int checksum;
 
 	public Session(Manager manager) {
 		super(manager);
@@ -84,11 +85,15 @@ public class Session extends org.apache.catalina.session.StandardSession {
 		this.dirty = false;
 	}
 
+	public synchronized int getChecksum() {
+		return checksum;
+	}
+
 	public SessionData serialize() throws IOException {
 		return serialize(null);
 	}
 
-	public int checksum() throws IOException {
+	public synchronized int checksum() throws IOException {
 		Map<String, Object> attributes = new HashMap<String, Object>();
 		for (Enumeration<String> enumerator = getAttributeNames(); enumerator.hasMoreElements();) {
 			String key = enumerator.nextElement();
@@ -98,16 +103,16 @@ public class Session extends org.apache.catalina.session.StandardSession {
 		}
 
 		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
-				ObjectOutputStream oos = new ObjectOutputStream(new BufferedOutputStream(bos));) {
+				ObjectOutputStream oos = new ObjectOutputStream(new BufferedOutputStream(bos))) {
 			oos.writeUnshared(attributes);
 			oos.flush();
 			bos.flush();
-			int checksum = Arrays.hashCode(bos.toByteArray());
+			checksum = Arrays.hashCode(bos.toByteArray());
 			return checksum;
 		}
 	}
 
-	public SessionData serialize(String alternativeSiteName) throws IOException {
+	public synchronized SessionData serialize(String alternativeSiteName) throws IOException {
 		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
 			setClean();
@@ -121,6 +126,11 @@ public class Session extends org.apache.catalina.session.StandardSession {
 	}
 
 	public static Session load(Manager manager, SessionData sessionData) throws IOException, ClassNotFoundException {
+		return load(manager, sessionData, true);
+	}
+
+	public static Session load(Manager manager, SessionData sessionData, boolean addToManager)
+			throws IOException, ClassNotFoundException {
 		Session session = null;
 		try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
 				ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(), manager.getContext())) {
@@ -132,7 +142,9 @@ public class Session extends org.apache.catalina.session.StandardSession {
 				session.site = sessionData.getSite();
 				session.access();
 				session.setClean();
-				manager.add(session);
+				if (addToManager) {
+					manager.add(session);
+				}
 			}
 		}
 		return session;

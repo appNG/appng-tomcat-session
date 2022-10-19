@@ -143,7 +143,8 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 						removeLocal(sessions.get(k));
 					}
 				} else {
-					Session session = Session.load(this, sessionData);
+					// do NOT add the session to the manager, since this would override the locally cached session!
+					Session session = Session.load(this, sessionData, false);
 					if (null == session) {
 						// session is not valid, so manager.remove(session, true) already has been called
 						// which in turn will remove the session from the local cache and also from the persistent store
@@ -200,6 +201,8 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 		}
 		return sessionData;
 	}
+
+
 
 	@Override
 	public void removeInternal(org.apache.catalina.Session session) {

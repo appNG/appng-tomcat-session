@@ -16,7 +16,6 @@
 package org.appng.tomcat.session;
 
 import java.io.Serializable;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Used to persist the binary representation of {@link org.apache.catalina.Session}.
