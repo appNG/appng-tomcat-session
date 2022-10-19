@@ -64,6 +64,7 @@
 		<connection>scm:git:ssh://git@github.com:appNG/appng-tomcat-session.git</connection>
 		<developerConnection>scm:git:ssh://git@github.com:appNG/appng-tomcat-session.git</developerConnection>
 		<url>https://github.com/appNG/appng-tomcat-session</url>
+		<tag>HEAD</tag>
 	</scm>
 	<ciManagement>
 		<system>jenkins</system>
