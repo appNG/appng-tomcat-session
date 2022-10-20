@@ -118,6 +118,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 			} else {
 				try {
 					session = Session.load(this, sessionData);
+					this.add(session);
 					if (log().isDebugEnabled()) {
 						if (null == session) {
 							log().debug(String.format("Session %s found, but has expired!", id));

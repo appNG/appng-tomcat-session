@@ -134,6 +134,7 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 		AtomicInteger count = new AtomicInteger(0);
 		keys.forEach(k -> {
 			try {
+				// no lock needed here!
 				SessionData sessionData = getPersistentSessions().get(k);
 				if (null == sessionData) {
 					if (log.isDebugEnabled()) {
@@ -143,8 +144,7 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 						removeLocal(sessions.get(k));
 					}
 				} else {
-					// do NOT add the session to the manager, since this would override the locally cached session!
-					Session session = Session.load(this, sessionData, false);
+					Session session = Session.load(this, sessionData);
 					if (null == session) {
 						// session is not valid, so manager.remove(session, true) already has been called
 						// which in turn will remove the session from the local cache and also from the persistent store

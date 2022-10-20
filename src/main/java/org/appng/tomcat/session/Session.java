@@ -126,11 +126,6 @@ public class Session extends org.apache.catalina.session.StandardSession {
 	}
 
 	public static Session load(Manager manager, SessionData sessionData) throws IOException, ClassNotFoundException {
-		return load(manager, sessionData, true);
-	}
-
-	public static Session load(Manager manager, SessionData sessionData, boolean addToManager)
-			throws IOException, ClassNotFoundException {
 		Session session = null;
 		try (ByteArrayInputStream is = new ByteArrayInputStream(sessionData.getData());
 				ObjectInputStream ois = Utils.getObjectInputStream(is, sessionData.getSite(), manager.getContext())) {
@@ -142,9 +137,6 @@ public class Session extends org.apache.catalina.session.StandardSession {
 				session.site = sessionData.getSite();
 				session.access();
 				session.setClean();
-				if (addToManager) {
-					manager.add(session);
-				}
 			}
 		}
 		return session;
