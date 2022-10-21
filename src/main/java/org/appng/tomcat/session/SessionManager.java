@@ -96,7 +96,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 	public Session createSession(String sessionId) {
 		Session session = (Session) super.createSession(sessionId);
 		if (log().isTraceEnabled()) {
-			log().trace(String.format("Created %s (isNew: %s)", session.getId(), session.isNew()));
+			log().trace(String.format("%s has been created (isNew: %s)", session.getId(), session.isNew()));
 		}
 		return session;
 	}
@@ -190,12 +190,12 @@ public abstract class SessionManager<T> extends ManagerBase {
 										: String.format("checksum %s <> %s", oldChecksum, checksum)))
 						: "sticky=false";
 
-				log().debug(String.format(Locale.ENGLISH, "Saved %s (%s) in %.2fms", sessionData, reason,
-						getDuration(start)));
+				log().debug(String.format(Locale.ENGLISH, "%s has been saved in %.2fms (%s)", sessionData,
+						getDuration(start), reason));
 			}
 		} else if (log().isDebugEnabled()) {
-			log().debug(
-					String.format("No changes in %s with checksum %s", session.getId(), sessionInternal.checksum()));
+			log().debug(String.format("%s has not been changed (checksum %s)", session.getId(),
+					sessionInternal.checksum()));
 		}
 		return saved;
 	}
@@ -220,6 +220,29 @@ public abstract class SessionManager<T> extends ManagerBase {
 					(System.currentTimeMillis() - session.getLastAccessedTimeInternal()) / 1000);
 			log().debug(message);
 		}
+	}
+
+	// method to be called by processExpires
+	protected boolean expireInternal(String id, SessionData sessionData) throws ClassNotFoundException, IOException {
+		if (null == sessionData) {
+			if (log().isDebugEnabled()) {
+				log().debug(String.format("%s not found in persistent store", id));
+			}
+			if (sticky) {
+				removeLocal(sessions.get(id));
+			}
+		} else {
+			Session session = Session.load(this, sessionData);
+			if (null == session) {
+				// session is not valid, so manager.remove(session, true) already has been called
+				// which in turn will remove the session from the local cache and also from the persistent store
+				if (log().isTraceEnabled()) {
+					log().trace(String.format("%s has been removed by internal expiration", id));
+				}
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

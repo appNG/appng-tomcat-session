@@ -29,11 +29,14 @@ import com.hazelcast.topic.ITopic;
 import com.hazelcast.topic.Message;
 import com.hazelcast.topic.MessageListener;
 
+/**
+ * A {@link SessionManager} that uses Hazelcast's {@link IMap} for storing sessions.
+ */
 public class HazelcastSessionManager extends SessionManager<IMap<String, SessionData>> {
 
 	private final Log log = Utils.getLog(HazelcastSessionManager.class);
 
-	// Listen for sessions that have been remove from the persistent store
+	// Listen for sessions that have been removed from the persistent store
 	private class SessionRemovedListener implements EntryRemovedListener<String, SessionData> {
 		@Override
 		public void entryRemoved(EntryEvent<String, SessionData> event) {
@@ -127,35 +130,21 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 	@Override
 	public void processExpires() {
 		long timeNow = System.currentTimeMillis();
+		// sufficient to use local keyset here, because every node runs this method
 		Set<String> keys = new HashSet<>(getPersistentSessions().localKeySet());
 		if (log.isDebugEnabled()) {
 			log.debug(String.format("Performing expiration check for %s sessions.", keys.size()));
 		}
 		AtomicInteger count = new AtomicInteger(0);
-		keys.forEach(k -> {
+		keys.forEach(id -> {
 			try {
-				// no lock needed here!
-				SessionData sessionData = getPersistentSessions().get(k);
-				if (null == sessionData) {
-					if (log.isDebugEnabled()) {
-						log.debug(String.format("Session %s not found in persistent store.", k));
-					}
-					if (sticky) {
-						removeLocal(sessions.get(k));
-					}
-				} else {
-					Session session = Session.load(this, sessionData);
-					if (null == session) {
-						// session is not valid, so manager.remove(session, true) already has been called
-						// which in turn will remove the session from the local cache and also from the persistent store
-						count.incrementAndGet();
-						if (log.isTraceEnabled()) {
-							log.trace(String.format("%s has been removed by internal expiration", k, mapName));
-						}
-					}
+				// must not use a lock here!
+				SessionData sessionData = getPersistentSessions().get(id);
+				if (expireInternal(id, sessionData)) {
+					count.incrementAndGet();
 				}
 			} catch (Throwable t) {
-				log.error(String.format("Error expiring session %s", k), t);
+				log.error(String.format("Error expiring session %s", id), t);
 			}
 		});
 		long timeEnd = System.currentTimeMillis();
@@ -191,6 +180,7 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 	}
 
 	@Override
+	// use a lock whilst finding the session
 	protected SessionData findSessionInternal(String id) throws IOException {
 		SessionData sessionData = null;
 		getPersistentSessions().lock(id);
@@ -201,8 +191,6 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 		}
 		return sessionData;
 	}
-
-
 
 	@Override
 	public void removeInternal(org.apache.catalina.Session session) {
