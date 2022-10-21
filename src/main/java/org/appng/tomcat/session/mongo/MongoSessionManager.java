@@ -23,7 +23,7 @@ import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
-import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
@@ -36,6 +36,7 @@ import org.appng.tomcat.session.Utils;
 import com.mongodb.BasicDBObject;
 import com.mongodb.DB;
 import com.mongodb.DBCollection;
+import com.mongodb.DBCursor;
 import com.mongodb.DBObject;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
@@ -45,12 +46,18 @@ import com.mongodb.ReadConcern;
 import com.mongodb.ReadPreference;
 import com.mongodb.ServerAddress;
 import com.mongodb.WriteConcern;
-import com.mongodb.WriteResult;
 
 /**
- * A {@link SessionManager} implementation that uses a {@link MongoClient}
+ * A {@link SessionManager} implementation that uses a {@link MongoClient}.
+ * <h2>IMPORTANT</h2>
+ * <p>
+ * This implementation currently does not handle the case of a site-reload!<br/>
+ * Locally cached sessions must be removed in that case to avoid classloader issues!<br/>
+ * One possible solution is to set {@code sticky=false} which forces the session to be removed from the local cache
+ * after each request.
+ * </p>
  */
-public final class MongoSessionManager extends SessionManager<DBCollection> {
+public class MongoSessionManager extends SessionManager<DBCollection> {
 
 	private final Log log = Utils.getLog(MongoSessionManager.class);
 
@@ -59,14 +66,8 @@ public final class MongoSessionManager extends SessionManager<DBCollection> {
 	/** Property used to store the Session's ID */
 	private static final String PROP_ID = "session_id";
 
-	/** Property used to store the Session's context name */
-	protected static final String PROP_CONTEXT = "app";
-
 	/** Property used to store the Session's last modified date. */
 	protected static final String PROP_LAST_MODIFIED = "lastModified";
-
-	/** Property used to store the Session's creation date. */
-	protected static final String PROP_CREATION_TIME = "creationTime";
 
 	/** Mongo Collection for the Sessions */
 	protected DBCollection collection;
@@ -188,6 +189,7 @@ public final class MongoSessionManager extends SessionManager<DBCollection> {
 			}
 
 			log.info(String.format("Using Database [%s]", this.dbName));
+			@SuppressWarnings("deprecation")
 			DB db = this.mongoClient.getDB(this.dbName);
 			this.collection = db.getCollection(this.collectionName);
 			log.info(String.format("Preparing indexes"));
@@ -195,13 +197,11 @@ public final class MongoSessionManager extends SessionManager<DBCollection> {
 			BasicDBObject lastModifiedIndex = new BasicDBObject(PROP_LAST_MODIFIED, 1);
 			try {
 				this.collection.dropIndex(lastModifiedIndex);
-				this.collection.dropIndex(new BasicDBObject(PROP_CONTEXT, 1));
 			} catch (Exception e) {
 				/* these indexes may not exist, so ignore */
 			}
 
 			this.collection.createIndex(lastModifiedIndex);
-			this.collection.createIndex(new BasicDBObject(PROP_CONTEXT, 1));
 			log.info(String.format("[%s]: Store ready.", this.getName()));
 		} catch (MongoException me) {
 			log.error("Unable to Connect to MongoDB", me);
@@ -220,43 +220,38 @@ public final class MongoSessionManager extends SessionManager<DBCollection> {
 	protected SessionData findSessionInternal(String id) throws IOException {
 		DBObject mongoSession = this.collection.findOne(sessionQuery(id));
 		if (null != mongoSession) {
-			byte[] sessionData = (byte[]) mongoSession.get(PROP_SESSIONDATA);
-			try (ByteArrayInputStream bais = new ByteArrayInputStream(sessionData);
-					ObjectInputStream ois = new ObjectInputStream(bais)) {
-				return (SessionData) ois.readObject();
-			} catch (ReflectiveOperationException roe) {
-				log.error(String.format("Error loading session: %s", id), roe);
-				throw new IOException(roe);
-			}
+			return loadSession(id, mongoSession);
 		} else {
 			log.warn(String.format("Session not found: %s, returning null!", id));
 		}
 		return null;
 	}
 
+	private SessionData loadSession(String id, DBObject mongoSession) throws IOException {
+		try (ByteArrayInputStream bais = new ByteArrayInputStream((byte[]) mongoSession.get(PROP_SESSIONDATA));
+				ObjectInputStream ois = new ObjectInputStream(bais)) {
+			return (SessionData) ois.readObject();
+		} catch (ReflectiveOperationException roe) {
+			log.error(String.format("Error loading session: %s", id), roe);
+			throw new IOException(roe);
+		}
+	}
+
 	private BasicDBObject sessionQuery(String id) {
-		return new BasicDBObject(PROP_ID, id).append(PROP_CONTEXT, this.getName());
+		return new BasicDBObject(PROP_ID, id);
 	}
 
 	@Override
 	protected void updateSession(String id, SessionData sessionData) throws IOException {
-		long start = System.nanoTime();
-
 		try (ByteArrayOutputStream bos = new ByteArrayOutputStream();
 				ObjectOutputStream oos = new ObjectOutputStream(bos)) {
-
 			oos.writeObject(sessionData);
-
 			BasicDBObject sessionQuery = sessionQuery(sessionData.getId());
 			BasicDBObject mongoSession = (BasicDBObject) sessionQuery.copy();
 			mongoSession.put(PROP_SESSIONDATA, bos.toByteArray());
 			mongoSession.put(PROP_LAST_MODIFIED, Calendar.getInstance().getTime());
 
-			WriteResult updated = this.collection.update(sessionQuery, mongoSession, true, false);
-			log.debug(String.format(Locale.ENGLISH,
-					"Saved session %s with query %s in %.2fms (lastModified %s) acknowledged: %s", sessionData.getId(),
-					sessionQuery, getDuration(start), mongoSession.getDate(PROP_LAST_MODIFIED),
-					updated.wasAcknowledged()));
+			this.collection.update(sessionQuery, mongoSession, true, false);
 		} catch (MongoException | IOException e) {
 			log.warn(String.format("Error saving session: %s", sessionData.getId()));
 			throw e;
@@ -269,16 +264,38 @@ public final class MongoSessionManager extends SessionManager<DBCollection> {
 		BasicDBObject sessionQuery = sessionQuery(id);
 		try {
 			this.collection.remove(sessionQuery);
-			log.debug(String.format("removed session %s (query: %s)", id, sessionQuery));
+			log.debug(String.format("%s has been removed (query: %s)", id, sessionQuery));
 		} catch (MongoException e) {
 			log.error("Unable to remove sessions for [" + id + ":" + this.getName() + "] from MongoDB", e);
 			throw e;
 		}
 	}
-	
-	//@Override
-	protected int expireInternal() {
-		return 0;
+
+	@Override
+	public void processExpires() {
+		long timeNow = System.currentTimeMillis();
+		DBCursor allSessions = this.collection.find(new BasicDBObject());
+		int size = allSessions.size();
+		log.debug(String.format("Checking expiry for  %s sessions.", size));
+		AtomicInteger count = new AtomicInteger(0);
+		while (allSessions.hasNext()) {
+			DBObject mongoSession = allSessions.next();
+			String id = (String) mongoSession.get(PROP_ID);
+			try {
+				if (expireInternal(id, loadSession(id, mongoSession))) {
+					count.incrementAndGet();
+				}
+			} catch (Throwable t) {
+				log.error(String.format("Error expiring session %s", id), t);
+			}
+		}
+		long timeEnd = System.currentTimeMillis();
+		long duration = timeEnd - timeNow;
+		processingTime += duration;
+		if (log.isInfoEnabled()) {
+			log.info(String.format("Expired %s of %s sessions in %sms", count, size, duration));
+		}
+		super.processExpires();
 	}
 
 	public void setCollectionName(String collectionName) {
@@ -296,5 +313,10 @@ public final class MongoSessionManager extends SessionManager<DBCollection> {
 	@Override
 	protected DBCollection getPersistentSessions() {
 		return collection;
+	}
+
+	// for testing
+	protected void clearAll() {
+		sessions.clear();
 	}
 }
