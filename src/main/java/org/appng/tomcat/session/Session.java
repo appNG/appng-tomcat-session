@@ -80,7 +80,7 @@ public class Session extends org.apache.catalina.session.StandardSession {
 		return dirty;
 	}
 
-	public void setClean() {
+	private void setClean() {
 		removeAttribute(DIRTY_FLAG);
 		this.dirty = false;
 	}

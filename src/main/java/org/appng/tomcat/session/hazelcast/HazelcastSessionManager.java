@@ -194,9 +194,9 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 
 	@Override
 	public void removeInternal(org.apache.catalina.Session session) {
-		getPersistentSessions().remove(session.getId());
-		if (log.isTraceEnabled()) {
-			log.trace(String.format("%s has been removed from '%s'", session.getId(), mapName));
+		SessionData removed = getPersistentSessions().remove(session.getId());
+		if (null != removed && log.isTraceEnabled()) {
+			log.trace(String.format("[%s] %s has been removed from '%s'", removed.getSite(), session.getId(), mapName));
 		}
 	}
 

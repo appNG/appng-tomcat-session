@@ -96,7 +96,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 	public Session createSession(String sessionId) {
 		Session session = (Session) super.createSession(sessionId);
 		if (log().isTraceEnabled()) {
-			log().trace(String.format("%s has been created (isNew: %s)", session.getId(), session.isNew()));
+			log().trace(String.format("%s has been created", session.getId()));
 		}
 		return session;
 	}
@@ -133,8 +133,8 @@ public abstract class SessionManager<T> extends ManagerBase {
 			}
 		} else {
 			if (log().isDebugEnabled()) {
-				log().debug(
-						String.format(Locale.ENGLISH, "Loaded %s from local store in %.2fms.", id, getDuration(start)));
+				log().debug(String.format(Locale.ENGLISH, "[%s] %s loaded from local store in %.2fms.",
+						session.getSite(), id, getDuration(start)));
 			}
 			session.access();
 		}
@@ -194,8 +194,8 @@ public abstract class SessionManager<T> extends ManagerBase {
 						getDuration(start), reason));
 			}
 		} else if (log().isDebugEnabled()) {
-			log().debug(String.format("%s has not been changed (checksum %s)", session.getId(),
-					sessionInternal.checksum()));
+			log().debug(String.format("[%s] %s has not been changed (checksum %s)", sessionInternal.getSite(),
+					session.getId(), sessionInternal.checksum()));
 		}
 		return saved;
 	}
@@ -204,7 +204,8 @@ public abstract class SessionManager<T> extends ManagerBase {
 	public void add(org.apache.catalina.Session session) {
 		super.add(session);
 		if (log().isTraceEnabled()) {
-			log().trace(String.format("%s has been added to local cache.", session.getId()));
+			log().trace(String.format("[%s] %s has been added to local cache.", Session.class.cast(session).getSite(),
+					session.getId()));
 		}
 	}
 
@@ -214,9 +215,9 @@ public abstract class SessionManager<T> extends ManagerBase {
 		removeInternal(session);
 		if (expired && log().isDebugEnabled()) {
 			String message = String.format(Locale.ENGLISH,
-					"%s has expired (created: %s, last accessed: %s, maxLifeTime: %ss, age: %ss)", session.getId(),
-					new Date(session.getCreationTimeInternal()), new Date(session.getLastAccessedTimeInternal()),
-					session.getMaxInactiveInterval(),
+					"[%s] %s has expired (created: %s, last accessed: %s, maxLifeTime: %ss, age: %ss)",
+					Session.class.cast(session).getSite(), session.getId(), new Date(session.getCreationTimeInternal()),
+					new Date(session.getLastAccessedTimeInternal()), session.getMaxInactiveInterval(),
 					(System.currentTimeMillis() - session.getLastAccessedTimeInternal()) / 1000);
 			log().debug(message);
 		}
@@ -237,7 +238,8 @@ public abstract class SessionManager<T> extends ManagerBase {
 				// session is not valid, so manager.remove(session, true) already has been called
 				// which in turn will remove the session from the local cache and also from the persistent store
 				if (log().isTraceEnabled()) {
-					log().trace(String.format("%s has been removed by internal expiration", id));
+					log().trace(String.format("[%s] %s has been removed by internal expiration", sessionData.getSite(),
+							id));
 				}
 				return true;
 			}
