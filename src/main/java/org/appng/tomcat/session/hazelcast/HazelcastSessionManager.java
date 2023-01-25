@@ -3,6 +3,7 @@ package org.appng.tomcat.session.hazelcast;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.io.ObjectStreamException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -143,6 +144,12 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 				if (expireInternal(id, sessionData)) {
 					count.incrementAndGet();
 				}
+			} catch (ObjectStreamException ose) {
+				log.info(String.format("{} occurred while checking session {} for expiration, so it will be removed: {}",
+						ose.getClass(), id, ose.getMessage()));
+				sessions.remove(id);
+				removeInternal(id);
+				count.incrementAndGet();
 			} catch (Throwable t) {
 				log.error(String.format("Error expiring session %s", id), t);
 			}
@@ -193,10 +200,10 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 	}
 
 	@Override
-	public void removeInternal(org.apache.catalina.Session session) {
-		SessionData removed = getPersistentSessions().remove(session.getId());
+	public void removeInternal(String id) {
+		SessionData removed = getPersistentSessions().remove(id);
 		if (null != removed && log.isTraceEnabled()) {
-			log.trace(String.format("[%s] %s has been removed from '%s'", removed.getSite(), session.getId(), mapName));
+			log.trace(String.format("[%s] %s has been removed from '%s'", removed.getSite(), id, mapName));
 		}
 	}
 

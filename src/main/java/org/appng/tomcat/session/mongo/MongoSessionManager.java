@@ -20,6 +20,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
@@ -27,7 +28,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
-import org.apache.catalina.Session;
 import org.apache.juli.logging.Log;
 import org.appng.tomcat.session.SessionData;
 import org.appng.tomcat.session.SessionManager;
@@ -259,8 +259,7 @@ public class MongoSessionManager extends SessionManager<DBCollection> {
 	}
 
 	@Override
-	public void removeInternal(Session session) {
-		String id = session.getId();
+	public void removeInternal(String id) {
 		BasicDBObject sessionQuery = sessionQuery(id);
 		try {
 			this.collection.remove(sessionQuery);
@@ -285,6 +284,12 @@ public class MongoSessionManager extends SessionManager<DBCollection> {
 				if (expireInternal(id, loadSession(id, mongoSession))) {
 					count.incrementAndGet();
 				}
+			} catch (ObjectStreamException ose) {
+				log.info(String.format("{} occurred while checking session {} for expiration, so it will be removed: {}",
+						ose.getClass(), id, ose.getMessage()));
+				sessions.remove(id);
+				removeInternal(id);
+				count.incrementAndGet();
 			} catch (Throwable t) {
 				log.error(String.format("Error expiring session %s", id), t);
 			}

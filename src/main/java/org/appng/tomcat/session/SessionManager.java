@@ -67,10 +67,10 @@ public abstract class SessionManager<T> extends ManagerBase {
 	/**
 	 * Remove the session from the underlying persistent storage
 	 * 
-	 * @param session
-	 *                the session to remove
+	 * @param id
+	 *                the session ID to remove
 	 */
-	public abstract void removeInternal(org.apache.catalina.Session session);
+	public abstract void removeInternal(String id);
 
 	public abstract Log log();
 
@@ -212,7 +212,7 @@ public abstract class SessionManager<T> extends ManagerBase {
 	@Override
 	public void remove(org.apache.catalina.Session session, boolean expired) {
 		super.remove(session, expired);
-		removeInternal(session);
+		removeInternal(session.getId());
 		if (expired && log().isDebugEnabled()) {
 			String message = String.format(Locale.ENGLISH,
 					"[%s] %s has expired (created: %s, last accessed: %s, maxLifeTime: %ss, age: %ss)",
