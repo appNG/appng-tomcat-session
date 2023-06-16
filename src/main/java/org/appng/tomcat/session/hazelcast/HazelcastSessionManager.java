@@ -3,7 +3,6 @@ package org.appng.tomcat.session.hazelcast;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
-import java.io.ObjectStreamException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -147,16 +146,13 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 						count.incrementAndGet();
 						log.debug(String.format("Expired session %s for site '%s'", id, site));
 					}
-				} catch (ObjectStreamException ose) {
+				} catch (Throwable t) {
 					log.info(String.format(
 							"%s occurred while checking session %s of site '%s' for expiration, so it will be removed: %s",
-							ose.getClass(), id, site, ose.getMessage()));
+							t.getClass(), id, site, t.getMessage()));
 					sessions.remove(id);
 					removeInternal(id);
 					count.incrementAndGet();
-				} catch (Throwable t) {
-					log.error(String.format("Error occurred while checking session %s of site '%s' for expiration", id,
-							site), t);
 				}
 			}
 		});
