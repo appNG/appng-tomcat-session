@@ -140,23 +140,24 @@ public class HazelcastSessionManager extends SessionManager<IMap<String, Session
 		keys.forEach(id -> {
 			// must not use a lock here!
 			SessionData sessionData = getPersistentSessions().get(id);
-			String site = sessionData.getSite();
-			try {
-				if (expireInternal(id, sessionData)) {
+			if (null != sessionData) {
+				String site = sessionData.getSite();
+				try {
+					if (expireInternal(id, sessionData)) {
+						count.incrementAndGet();
+						log.debug(String.format("Expired session %s for site '%s'", id, site));
+					}
+				} catch (ObjectStreamException ose) {
+					log.info(String.format(
+							"%s occurred while checking session %s of site '%s' for expiration, so it will be removed: %s",
+							ose.getClass(), id, site, ose.getMessage()));
+					sessions.remove(id);
+					removeInternal(id);
 					count.incrementAndGet();
-					log.debug(String.format("Expired session %s for site '%s'", id, site));
+				} catch (Throwable t) {
+					log.error(String.format("Error occurred while checking session %s of site '%s' for expiration", id,
+							site), t);
 				}
-			} catch (ObjectStreamException ose) {
-				log.info(String.format(
-						"%s occurred while checking session %s of site '%s' for expiration, so it will be removed: %s",
-						ose.getClass(), id, site, ose.getMessage()));
-				sessions.remove(id);
-				removeInternal(id);
-				count.incrementAndGet();
-			} catch (Throwable t) {
-				log.error(
-						String.format("Error occurred while checking session %s of site '%s' for expiration", id, site),
-						t);
 			}
 		});
 		long timeEnd = System.currentTimeMillis();
